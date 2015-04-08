@@ -238,6 +238,8 @@ def FB15kexp(state, channel):
     state.bestvalid = -1
 
     batchsize = trainl.shape[1] / state.nbatches
+    print >> sys.stderr, 'batchsize:', batchsize
+    print >> sys.stderr, 'nbatches:', state.nbatches
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
