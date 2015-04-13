@@ -144,7 +144,7 @@ for i in remove_tst_ex:
 
 pjoin = os.path.join
 pdir = os.path.dirname
-ENTITY_DESCRIPTION_DATA = pjoin(pdir(pdir(__file__)), 'crawfb', 'items.json')
+ENTITY_DESCRIPTION_DATA = pjoin(pdir(pdir(__file__)), 'crawlfb', 'items.json')
 
 with open(ENTITY_DESCRIPTION_DATA, 'r') as f:
     items = json.load(f)
