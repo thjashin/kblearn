@@ -5,7 +5,7 @@ import numpy as np
 import scipy.sparse as sp
 
 # Put the freebase15k data absolute path here
-datapath = '/Users/cc/data/FB15k/'
+datapath = '/home/cc/jxshi/data/FB15k/'
 assert datapath is not None
 
 if 'data' not in os.listdir('../'):
