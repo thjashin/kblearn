@@ -1,7 +1,7 @@
 #! /usr/bin/python
 
 from model import *
-
+from semantic import build_model
 
 # Utils ----------------------------------------------------------------------
 def create_random_mat(shape, listidx=None):
@@ -86,6 +86,11 @@ def FB15kexp(state, channel):
         if not os.path.isdir(state.savepath):
             os.mkdir(state.savepath)
 
+    # load ngram features of entities
+    entity_ngrams = load_file(state.datapath + state.dataset +
+                              'FB15k_bag-of-ngrams.pkl')
+    print 'entity_ngrams.shape:', entity_ngrams.shape
+
     # Positives
     trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')
     trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')
@@ -106,9 +111,17 @@ def FB15kexp(state, channel):
     testo = load_file(state.datapath + state.dataset + '-test-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         testo = testo[-state.Nrel:, :]
+ 
+    batchsize = trainl.shape[1] / state.nbatches
+
+    print 'trainl.shape:', trainl.shape
+    print 'trainr.shape:', trainr.shape
+    print 'traino.shape:', traino.shape
 
     # Index conversion
-    trainlidx = convert2idx(trainl)[:state.neval]
+    trainlidx = convert2idx(trainl)
+    print 'trainlidx.shape:', trainlidx.shape
+    trainlidx = trainlidx[:state.neval]
     trainridx = convert2idx(trainr)[:state.neval]
     trainoidx = convert2idx(traino)[:state.neval]
     validlidx = convert2idx(validl)[:state.neval]
@@ -116,7 +129,11 @@ def FB15kexp(state, channel):
     validoidx = convert2idx(valido)[:state.neval]
     testlidx = convert2idx(testl)[:state.neval]
     testridx = convert2idx(testr)[:state.neval]
-    testoidx = convert2idx(testo)[:state.neval]
+    testoidx = convert2idx(testo)[:state.neval] 
+
+    print 'trainlidx.shape:', trainlidx.shape
+    print 'trainridx.shape:', trainridx.shape
+    print 'trainoidx.shape:', trainoidx.shape
 
     # Model declaration
     if not state.loadmodel:
@@ -160,6 +177,7 @@ def FB15kexp(state, channel):
         f.close()
 
     # Function compilation
+    sem_model = build_model(entity_ngrams.shape[1], n_dims, batchsize)
     trainfunc = TrainFn1Member(simfn, embeddings, leftop, rightop,
             marge=state.marge, rel=False)
     ranklfunc = RankLeftFnIdx(simfn, embeddings, leftop, rightop,
@@ -170,8 +188,6 @@ def FB15kexp(state, channel):
     out = []
     outb = []
     state.bestvalid = -1
-
-    batchsize = trainl.shape[1] / state.nbatches
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()

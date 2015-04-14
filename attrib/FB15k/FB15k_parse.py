@@ -1,8 +1,12 @@
-import os, sys
+import os
+import sys
+import json
 import cPickle
+from collections import defaultdict
 
 import numpy as np
 import scipy.sparse as sp
+from nltk.tokenize import word_tokenize
 
 # Put the freebase15k data absolute path here
 datapath = '/home/cc/jxshi/data/FB15k/'
@@ -144,7 +148,9 @@ for i in remove_tst_ex:
 
 pjoin = os.path.join
 pdir = os.path.dirname
-ENTITY_DESCRIPTION_DATA = pjoin(pdir(pdir(__file__)), 'crawlfb', 'items.json')
+pabs = os.path.abspath
+ENTITY_DESCRIPTION_DATA = pjoin(pdir(pdir(pdir(pabs(__file__)))),
+                                'crawlfb', 'items.json')
 
 with open(ENTITY_DESCRIPTION_DATA, 'r') as f:
     items = json.load(f)
@@ -168,6 +174,9 @@ for item in items:
 
     items_seg.append((mid, name, words))
 
+print 'len(word2id):', len(word2id)
+print 'len(id2word):', len(id2word)
+
 with open('../data/FB15k_word2id.pkl', 'w') as f:
     cPickle.dump(word2id, f, -1)
 with open('../data/FB15k_id2word.pkl', 'w') as f:
@@ -176,14 +185,16 @@ with open('../data/FB15k_id2word.pkl', 'w') as f:
 
 entity_words = sp.lil_matrix(
     (np.max(entity2idx.values()) + 1, len(word2id)), dtype='float32')
-for mid, name, words in items_segs:
+for mid, name, words in items_seg:
     if mid in entity2idx:
         id_ = entity2idx[mid]
         for word in words:
             entity_words[id_, word2id[word]] += 1
 
+print 'entity_words.shape:', entity_words.shape
+
 with open('../data/FB15k-bag-of-words.pkl', 'w') as f:
-    cPickle.dump(entity_words.to_csr(), f, -1)
+    cPickle.dump(entity_words.tocsr(), f, -1)
 
 #############################################################################
 ### Creation of the n-gram dictionaries and bag-of-ngrams feature for text
@@ -192,14 +203,18 @@ with open('../data/FB15k-bag-of-words.pkl', 'w') as f:
 n = 3
 ngram2id = {}
 id2ngram = {}
-for mid, name, words in item_segs:
+for mid, name, words in items_seg:
     for word in set(words):
         word = '#%s#' % word
         ngrams = [word[i:(i+3)] for i in xrange(len(word) - 2)]
         for ngram in ngrams:
-            id_ = len(ngram2id)
-            ngram2id[ngram] = id_
-            id2ngram[id_] = ngram
+            if ngram not in ngram2id:
+                id_ = len(ngram2id)
+                ngram2id[ngram] = id_
+                id2ngram[id_] = ngram
+
+print 'len(ngram2id):', len(ngram2id)
+print 'len(id2ngram):', len(id2ngram)
 
 with open('../data/FB15k_%dgram2id.pkl' % n, 'w') as f:
     cPickle.dump(ngram2id, f, -1)
@@ -211,7 +226,7 @@ entity_ngrams_dic = defaultdict(int)
 entity_ngrams = sp.lil_matrix(
     (np.max(entity2idx.values()) + 1, len(ngram2id)), dtype='float32')
 
-for mid, name, words in item_segs:
+for mid, name, words in items_seg:
     id_ = entity2idx[mid]
     for word in words:
         word = '#%s#' % word
@@ -222,10 +237,8 @@ for mid, name, words in item_segs:
 for k, v in entity_ngrams_dic.iteritems():
     entity_ngrams[k[0], k[1]] = v
 
+print 'entity_ngrams.shape:', entity_ngrams.shape
+
 with open('../data/FB15k-bag-of-ngrams.pkl', 'w') as f:
-    cPickle.dump(entity_ngrams.to_csr(), f, -1)
-
-
-
-
+    cPickle.dump(entity_ngrams.tocsr(), f, -1)
 

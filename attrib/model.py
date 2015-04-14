@@ -844,6 +844,106 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
                            on_unused_input='ignore')
 
 
+def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=True):
+    """
+    :param sem_ents: semantic entities, the output of semantic modeling
+                     neural network
+    """
+    embedding, relationl, relationr = parse_embeddings(embeddings)
+    weights = lasagne.layers.get_all_params(sem_model)
+
+    # Inputs
+    inpr = S.csr_matrix()
+    inpl = S.csr_matrix()
+    inpo = S.csr_matrix()
+    inpln = S.csr_matrix()
+    inprn = S.csr_matrix()
+    lrparams = T.scalar('lrparams')
+    lrembeddings = T.scalar('lrembeddings')
+    input_ = T.matrix()
+
+    # Graph
+    sem_ents = sem_model.get_output(input_, deterministic=True).T
+
+    lhs = S.dot(sem_ents, inpl).T
+    rhs = S.dot(sem_ents, inpr).T
+    rell = S.dot(relationl.E, inpo).T
+    relr = S.dot(relationr.E, inpo).T
+    lhsn = S.dot(sem_ents, inpln).T
+    rhsn = S.dot(sem_ents, inprn).T
+    simi = fnsim(lefttop(lhs, rell), rightop(rhs, relr))
+    # Negative left member
+    similn = fnsim(leftop(lhsn, rell), rightop(rhs, relr))
+    # Negative right member
+    simirn = fnsim(leftop(lhs, rell), rightop(rhsn, relr))
+    costl, outl = margincost(simi, similn, marge)
+    costr, outr = margincost(simi, simirn, marge)
+    cost = costl + costr
+    out = T.concatenate([outl, outr])
+    list_in = [input_, lrweights, lrembeddings, lrparams,
+               inpr, inpl, inpo, inpln, inprn]
+    if rel:
+        # If rel is True, we also consider a negative relation member
+        inpon = S.csr_matrix()
+        relln = S.dot(relationl.E, inpon).T
+        relrn = S.dot(relationl.E, inpon).T
+        simion = fnsim(leftop(lhs, relln), rightop(rhs, relrn))
+        costo, outo = margincost(simi, simion, marge)
+        cost += costo
+        out = T.concatenate([out, outo])
+        list_in += [inpon]
+
+    if hasattr(fnsim, 'params'):
+        # If the similarity function has some parameters, we update them too.
+        gradientsparams = T.grad(cost,
+            leftop.params + rightop.params + fnsim.params)
+        updates = OrderedDict((i, i - lrparams * j) for i, j in zip(
+            leftop.params + rightop.params + fnsim.params, gradientsparams))
+    else:
+        gradientsparams = T.grad(cost, leftop.params + rightop.params)
+        updates = OrderedDict((i, i - lrparams * j) for i, j in zip(
+            leftop.params + rightop.params, gradientsparams))
+    gradients_weights = T.grad(cost, weights)
+    new_weights = weights - lrweights * gradients_weights
+    updates.update({weights: new_weights})
+
+    if type(embeddings) == list:
+        # If there are different embeddings for the relation member.
+        gradients_embedding = T.grad(cost, relationl.E)
+        newE = relationl.E - lrparams * gradients_embedding
+        updates.update({relationl.E: newE})
+        gradients_embedding = T.grad(cost, relationr.E)
+        newE = relationr.E - lrparams * gradients_embedding
+        updates.update({relationr.E: newE})
+    """
+    Theano function inputs.
+    :input lrweights: learning rate for the semantic modeling weights.
+    :input lrembeddings: learning rate for the embeddings.
+    :input lrparams: learning rate for the parameters.
+    :input input_: text attribute features of entities.
+    :input inpl: sparse csr matrix representing the indexes of the positive
+                 triplet 'left' member, shape=(#examples,N [Embeddings]).
+    :input inpr: sparse csr matrix representing the indexes of the positive
+                 triplet 'right' member, shape=(#examples,N [Embeddings]).
+    :input inpo: sparse csr matrix representing the indexes of the positive
+                 triplet relation member, shape=(#examples,N [Embeddings]).
+    :input inpln: sparse csr matrix representing the indexes of the negative
+                  triplet 'left' member, shape=(#examples,N [Embeddings]).
+    :input inprn: sparse csr matrix representing the indexes of the negative
+                  triplet 'right' member, shape=(#examples,N [Embeddings]).
+    :opt input inpon: sparse csr matrix representing the indexes of the
+                      negative triplet relation member, shape=(#examples,N
+                      [Embeddings]).
+
+    Theano function output.
+    :output mean(cost): average cost.
+    :output mean(out): ratio of examples for which the margin is violated,
+                       i.e. for which an update occurs.
+    """
+    return theano.function(list_in, [T.mean(cost), T.mean(out)],
+            updates=updates, on_unused_input='ignore')
+
+
 def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     """
     This function returns a theano function to perform a training iteration,
