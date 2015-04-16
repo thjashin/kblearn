@@ -1,5 +1,6 @@
 #! /usr/bin/python
 
+import lasagne
 from model import *
 from semantic import build_model
 
@@ -88,7 +89,8 @@ def FB15kexp(state, channel):
 
     # load ngram features of entities
     entity_ngrams = load_file(state.datapath + state.dataset +
-                              'FB15k_bag-of-ngrams.pkl')
+                              '-bag-of-ngrams.pkl').astype(theano.config.floatX)
+    entity_ngrams_shared = shared_sem_inputs(entity_ngrams)
     print 'entity_ngrams.shape:', entity_ngrams.shape
 
     # Positives
@@ -177,13 +179,20 @@ def FB15kexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_ngrams.shape[1], n_dims, batchsize)
-    trainfunc = TrainFn1Member(simfn, embeddings, leftop, rightop,
-            marge=state.marge, rel=False)
-    ranklfunc = RankLeftFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=state.Nsyn)
-    rankrfunc = RankRightFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=state.Nsyn)
+    sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
+    trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
+            rightop, marge=state.marge, rel=False)
+    ranklfunc = RankLeftFnIdx(simfn, entity_ngrams_shared, sem_model, embeddings, leftop,
+            rightop, subtensorspec=state.Nsyn)
+    rankrfunc = RankRightFnIdx(simfn, entity_ngrams_shared, sem_model, embeddings, leftop,
+            rightop, subtensorspec=state.Nsyn)
+    
+    valid_sem_inputl = entity_ngrams[validlidx].toarray()
+    valid_sem_inputr = entity_ngrams[validridx].toarray()
+    train_sem_inputl = entity_ngrams[trainlidx].toarray()
+    train_sem_inputr = entity_ngrams[trainridx].toarray()
+    test_sem_inputl = entity_ngrams[testlidx].toarray()
+    test_sem_inputr = entity_ngrams[testridx].toarray()
 
     out = []
     outb = []
@@ -208,9 +217,26 @@ def FB15kexp(state, channel):
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
             tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
             tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
+            sem_inputl = entity_ngrams.T.dot(tmpl).T.toarray()
+            sem_inputr = entity_ngrams.T.dot(tmpr).T.toarray()
+            sem_inputnl = entity_ngrams.T.dot(tmpnl).T.toarray()
+            sem_inputnr = entity_ngrams.T.dot(tmpnr).T.toarray()
+
             # training iteration
-            outtmp = trainfunc(state.lremb, state.lrparam / float(batchsize),
-                    tmpl, tmpr, tmpo, tmpnl, tmpnr)
+            outtmp = trainfunc(state.lrweights, state.lremb,
+                               state.lrparam / float(batchsize),
+                               sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
+            print >> sys.stderr, 'Epoch %d, batch %d, cost: %d' % (
+                epoch_count, i, outtmp[0] / float(batchsize))
+            lhs, rhs = outtmp[2], outtmp[3]
+            print 'lhs.shape:', lhs.shape
+            print lhs
+            print lhs[0]
+            print (lhs == 0).all()
+            print 'rhs.shape:', rhs.shape
+            print rhs
+            print rhs[0]
+            print (rhs == 0).all()
             out += [outtmp[0] / float(batchsize)]
             outb += [outtmp[1]]
             # embeddings normalization
@@ -231,22 +257,23 @@ def FB15kexp(state, channel):
             out = []
             outb = []
             resvalid = RankingScoreIdx(ranklfunc, rankrfunc,
-                    validlidx, validridx, validoidx)
+                    valid_sem_inputl, valid_sem_inputr, validoidx)
             state.valid = np.mean(resvalid[0] + resvalid[1])
             restrain = RankingScoreIdx(ranklfunc, rankrfunc,
-                    trainlidx, trainridx, trainoidx)
+                    train_sem_inputl, train_sem_inputr, trainoidx)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                     state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
                 restest = RankingScoreIdx(ranklfunc, rankrfunc,
-                        testlidx, testridx, testoidx)
+                        test_sem_inputl, test_sem_inputr, testoidx)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
                 state.bestepoch = epoch_count
                 # Save model best valid model
                 f = open(state.savepath + '/best_valid_model.pkl', 'w')
+                cPickle.dump(sem_model, f, -1)
                 cPickle.dump(embeddings, f, -1)
                 cPickle.dump(leftop, f, -1)
                 cPickle.dump(rightop, f, -1)
@@ -256,6 +283,7 @@ def FB15kexp(state, channel):
                         state.besttest)
             # Save current model
             f = open(state.savepath + '/current_model.pkl', 'w')
+            cPickle.dump(sem_model, f, -1)
             cPickle.dump(embeddings, f, -1)
             cPickle.dump(leftop, f, -1)
             cPickle.dump(rightop, f, -1)
@@ -271,8 +299,8 @@ def FB15kexp(state, channel):
 
 def launch(datapath='data/', dataset='FB15k', Nent=16296,
         Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
-        simfn='Dot', ndim=50, nhid=50, marge=1., lremb=0.1, lrparam=1.,
-        nbatches=100, totepochs=2000, test_all=1, neval=50, seed=123,
+        simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, lremb=0.1,
+        lrparam=1., nbatches=100, totepochs=2000, test_all=1, neval=50, seed=123,
         savepath='.'):
 
     # Argument of the experiment script
@@ -290,6 +318,7 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
     state.ndim = ndim
     state.nhid = nhid
     state.marge = marge
+    state.lrweights = lrweights
     state.lremb = lremb
     state.lrparam = lrparam
     state.nbatches = nbatches

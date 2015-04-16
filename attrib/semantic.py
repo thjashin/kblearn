@@ -6,13 +6,13 @@ import theano.tensor as T
 import lasagne
 
 
-def build_model(input_dim, output_dim, batch_size):
+def build_model(input_dim, output_dim, batch_size=None):
     l_in = lasagne.layers.InputLayer(
         shape=(batch_size, input_dim),
     )
     l_hidden1 = lasagne.layers.DenseLayer(
         l_in,
-        num_units=500,
+        num_units=200,
         nonlinearity=lasagne.nonlinearities.rectify,
     )
     l_out = lasagne.layers.DenseLayer(
@@ -22,3 +22,4 @@ def build_model(input_dim, output_dim, batch_size):
     )
     # TODO(jiaxin): add a normalization layer
     return l_out
+

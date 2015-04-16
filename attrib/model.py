@@ -10,6 +10,7 @@ import scipy.sparse
 import theano
 import theano.sparse as S
 import theano.tensor as T
+import lasagne
 from collections import OrderedDict
 
 
@@ -256,6 +257,10 @@ class Embeddings(object):
         self.normalize = theano.function([], [], updates=self.updates)
 # ----------------------------------------------------------------------------
 
+# Semantic inputs ------------------------------------------------------------
+def shared_sem_inputs(input_):
+    return theano.shared(input_.todense(), borrow=True)
+    
 
 def parse_embeddings(embeddings):
     """
@@ -555,7 +560,7 @@ def SimFnIdx(fnsim, embeddings, leftop, rightop):
             on_unused_input='ignore')
 
 
-def RankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
+def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'right' entities given couples of relation and 'left' entities (as
@@ -573,31 +578,34 @@ def RankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    idxl = T.iscalar('idxl')
+    sem_inputl = T.vector('sem_inputl')
     idxo = T.iscalar('idxo')
+
     # Graph
-    lhs = (embedding.E[:, idxl]).reshape((1, embedding.D))
+    lhs = sem_model.get_output(sem_inputl, deterministic=True).reshape((
+                               1, embedding.D))
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        rhs = (embedding.E[:, :subtensorspec]).T
-    else:
-        rhs = embedding.E.T
+        sem_inputs = sem_inputs[:subtensorspec]
+    rhs = sem_model.get_output(sem_inputs, deterministic=True)
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = leftop(lhs, rell)
     simi = fnsim(tmp.reshape((1, tmp.shape[1])), rightop(rhs, relr))
     """
     Theano function inputs.
-    :input idxl: index value of the 'left' member.
+    :input sem_inputl: the semantic input of the left entity.
+    :input sem_inputsr: all the semantic inputs of right entities
     :input idxo: index value of the relation member.
 
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([idxl, idxo], [simi], on_unused_input='ignore')
+    return theano.function([sem_inputl, idxo], [simi],
+                           on_unused_input='ignore')
 
 
-def RankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
+def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'left' entities given couples of relation and 'right' entities (as
@@ -615,29 +623,31 @@ def RankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    idxr = T.iscalar('idxr')
+    sem_inputr = T.vector('sem_inputr')
     idxo = T.iscalar('idxo')
+
     # Graph
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        lhs = (embedding.E[:, :subtensorspec]).T
-    else:
-        lhs = embedding.E.T
-    rhs = (embedding.E[:, idxr]).reshape((1, embedding.D))
+        sem_inputs = sem_inputs[:subtensorspec]
+    lhs = sem_model.get_output(sem_inputs, deterministic=True)
+    rhs = sem_model.get_output(sem_inputr, deterministic=True).reshape((
+                               1, embedding.D))
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = rightop(rhs, relr)
     simi = fnsim(leftop(lhs, rell), tmp.reshape((1, tmp.shape[1])))
     """
     Theano function inputs.
-    :input idxr: index value of the 'right' member.
+    :input sem_inputr: semantic input of the 'right' member.
+    :input sem_inputsl: all semantic inputs of 'left' entities.
     :input idxo: index value of the relation member.
 
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([idxr, idxo], [simi],
-            on_unused_input='ignore')
+    return theano.function([sem_inputr, idxo], [simi],
+                           on_unused_input='ignore')
 
 
 def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
@@ -853,25 +863,24 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     weights = lasagne.layers.get_all_params(sem_model)
 
     # Inputs
-    inpr = S.csr_matrix()
-    inpl = S.csr_matrix()
+    sem_inputl = T.matrix()
+    sem_inputr = T.matrix()
     inpo = S.csr_matrix()
-    inpln = S.csr_matrix()
-    inprn = S.csr_matrix()
+    sem_inputln = T.matrix()
+    sem_inputrn = T.matrix()
     lrparams = T.scalar('lrparams')
     lrembeddings = T.scalar('lrembeddings')
-    input_ = T.matrix()
+    lrweights = T.scalar('lrweights')
 
     # Graph
-    sem_ents = sem_model.get_output(input_, deterministic=True).T
-
-    lhs = S.dot(sem_ents, inpl).T
-    rhs = S.dot(sem_ents, inpr).T
+    lhs = sem_model.get_output(sem_inputl)
+    rhs = sem_model.get_output(sem_inputr)
     rell = S.dot(relationl.E, inpo).T
     relr = S.dot(relationr.E, inpo).T
-    lhsn = S.dot(sem_ents, inpln).T
-    rhsn = S.dot(sem_ents, inprn).T
-    simi = fnsim(lefttop(lhs, rell), rightop(rhs, relr))
+    lhsn = sem_model.get_output(sem_inputln)
+    rhsn = sem_model.get_output(sem_inputrn)
+
+    simi = fnsim(leftop(lhs, rell), rightop(rhs, relr))
     # Negative left member
     similn = fnsim(leftop(lhsn, rell), rightop(rhs, relr))
     # Negative right member
@@ -880,8 +889,8 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     costr, outr = margincost(simi, simirn, marge)
     cost = costl + costr
     out = T.concatenate([outl, outr])
-    list_in = [input_, lrweights, lrembeddings, lrparams,
-               inpr, inpl, inpo, inpln, inprn]
+    list_in = [lrweights, lrembeddings, lrparams,
+               sem_inputl, sem_inputr, inpo, sem_inputln, sem_inputrn]
     if rel:
         # If rel is True, we also consider a negative relation member
         inpon = S.csr_matrix()
@@ -904,8 +913,9 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
         updates = OrderedDict((i, i - lrparams * j) for i, j in zip(
             leftop.params + rightop.params, gradientsparams))
     gradients_weights = T.grad(cost, weights)
-    new_weights = weights - lrweights * gradients_weights
-    updates.update({weights: new_weights})
+    for w, grad_w in zip(weights, gradients_weights):
+        new_w = w - lrweights * grad_w
+        updates.update({w: new_w})
 
     if type(embeddings) == list:
         # If there are different embeddings for the relation member.
@@ -920,17 +930,16 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     :input lrweights: learning rate for the semantic modeling weights.
     :input lrembeddings: learning rate for the embeddings.
     :input lrparams: learning rate for the parameters.
-    :input input_: text attribute features of entities.
-    :input inpl: sparse csr matrix representing the indexes of the positive
-                 triplet 'left' member, shape=(#examples,N [Embeddings]).
-    :input inpr: sparse csr matrix representing the indexes of the positive
-                 triplet 'right' member, shape=(#examples,N [Embeddings]).
+    :input sem_inputl: sparse csr matrix representing the indexes of the positive
+                       triplet 'left' member, shape=(#examples,N [Embeddings]).
+    :input sem_inputr: sparse csr matrix representing the indexes of the positive
+                       triplet 'right' member, shape=(#examples,N [Embeddings]).
     :input inpo: sparse csr matrix representing the indexes of the positive
                  triplet relation member, shape=(#examples,N [Embeddings]).
-    :input inpln: sparse csr matrix representing the indexes of the negative
-                  triplet 'left' member, shape=(#examples,N [Embeddings]).
-    :input inprn: sparse csr matrix representing the indexes of the negative
-                  triplet 'right' member, shape=(#examples,N [Embeddings]).
+    :input sem_inputln: sparse csr matrix representing the indexes of the negative
+                        triplet 'left' member, shape=(#examples,N [Embeddings]).
+    :input sem_inputrn: sparse csr matrix representing the indexes of the negative
+                        triplet 'right' member, shape=(#examples,N [Embeddings]).
     :opt input inpon: sparse csr matrix representing the indexes of the
                       negative triplet relation member, shape=(#examples,N
                       [Embeddings]).
@@ -940,7 +949,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     :output mean(out): ratio of examples for which the margin is violated,
                        i.e. for which an update occurs.
     """
-    return theano.function(list_in, [T.mean(cost), T.mean(out)],
+    return theano.function(list_in, [T.mean(cost), T.mean(out), lhs, rhs],
             updates=updates, on_unused_input='ignore')
 
 
@@ -1126,24 +1135,25 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     return theano.function(list_in, list_out, on_unused_input='ignore')
 
 
-def RankingScoreIdx(sl, sr, idxl, idxr, idxo):
+def RankingScoreIdx(sl, sr, sem_inputl, sem_inputr, idxo):
     """
     This function computes the rank list of the lhs and rhs, over a list of
     lhs, rhs and rel indexes.
 
+    :param input_: text features of all entities
     :param sl: Theano function created with RankLeftFnIdx().
     :param sr: Theano function created with RankRightFnIdx().
-    :param idxl: list of 'left' indices.
-    :param idxr: list of 'right' indices.
+    :param sem_inputl: 'left'
+    :param sem_inputr: 'right'
     :param idxo: list of relation indices.
     """
     errl = []
     errr = []
-    for l, o, r in zip(idxl, idxo, idxr):
+    for l, o, r in zip(range(sem_inputl.shape[0]), idxo, range(sem_inputr.shape[0])):
         errl += [np.argsort(np.argsort((
-            sl(r, o)[0]).flatten())[::-1]).flatten()[l] + 1]
+            sl(sem_inputr[r], o)[0]).flatten())[::-1]).flatten()[l] + 1]
         errr += [np.argsort(np.argsort((
-            sr(l, o)[0]).flatten())[::-1]).flatten()[r] + 1]
+            sr(sem_inputl[l], o)[0]).flatten())[::-1]).flatten()[r] + 1]
     return errl, errr
 
 
