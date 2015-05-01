@@ -89,7 +89,7 @@ def FB15kexp(state, channel):
 
     # load ngram features of entities
     entity_ngrams = load_file(state.datapath + state.dataset +
-                              '-bag-of-ngrams.pkl').astype(theano.config.floatX)
+                              '-bag-of-3grams.pkl').astype(theano.config.floatX)
     entity_ngrams_shared = shared_sem_inputs(entity_ngrams)
     print 'entity_ngrams.shape:', entity_ngrams.shape
 
@@ -223,27 +223,19 @@ def FB15kexp(state, channel):
             sem_inputnr = entity_ngrams.T.dot(tmpnr).T.toarray()
 
             # training iteration
-            outtmp = trainfunc(state.lrweights, state.lremb,
+            outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam / float(batchsize),
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            print >> sys.stderr, 'Epoch %d, batch %d, cost: %d' % (
-                epoch_count, i, outtmp[0] / float(batchsize))
-            lhs, rhs = outtmp[2], outtmp[3]
-            print 'lhs.shape:', lhs.shape
-            print lhs
-            print lhs[0]
-            print (lhs == 0).all()
-            print 'rhs.shape:', rhs.shape
-            print rhs
-            print rhs[0]
-            print (rhs == 0).all()
             out += [outtmp[0] / float(batchsize)]
             outb += [outtmp[1]]
             # embeddings normalization
-            if type(embeddings) is list:
-                embeddings[0].normalize()
-            else:
-                embeddings.normalize()
+            # if type(embeddings) is list:
+            #     embeddings[0].normalize()
+            # else:
+            #     embeddings.normalize()
+
+        print >> sys.stderr, 'Epoch %d, cost: %f' % (
+            epoch_count, np.mean(out[-state.nbatches:]))
 
         if (epoch_count % state.test_all) == 0:
             # model evaluation
@@ -256,17 +248,17 @@ def FB15kexp(state, channel):
                     round(np.mean(outb) * 100, 3))
             out = []
             outb = []
-            resvalid = RankingScoreIdx(ranklfunc, rankrfunc,
-                    valid_sem_inputl, valid_sem_inputr, validoidx)
+            resvalid = FastRankingScoreIdx(ranklfunc, rankrfunc,
+                    validlidx, valid_sem_inputl, validridx, valid_sem_inputr, validoidx)
             state.valid = np.mean(resvalid[0] + resvalid[1])
-            restrain = RankingScoreIdx(ranklfunc, rankrfunc,
-                    train_sem_inputl, train_sem_inputr, trainoidx)
+            restrain = FastRankingScoreIdx(ranklfunc, rankrfunc,
+                    trainlidx, train_sem_inputl, trainridx, train_sem_inputr, trainoidx)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                     state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
-                restest = RankingScoreIdx(ranklfunc, rankrfunc,
-                        test_sem_inputl, test_sem_inputr, testoidx)
+                restest = FastRankingScoreIdx(ranklfunc, rankrfunc,
+                        testlidx, test_sem_inputl, testridx, test_sem_inputr, testoidx)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
@@ -299,9 +291,9 @@ def FB15kexp(state, channel):
 
 def launch(datapath='data/', dataset='FB15k', Nent=16296,
         Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
-        simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, lremb=0.1,
-        lrparam=1., nbatches=100, totepochs=2000, test_all=1, neval=50, seed=123,
-        savepath='.'):
+        simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, momentum=0.9,
+        lremb=0.1, lrparam=1., nbatches=100, totepochs=2000, test_all=1, neval=50,
+        seed=123, savepath='.'):
 
     # Argument of the experiment script
     state = DD()
@@ -319,6 +311,7 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
     state.nhid = nhid
     state.marge = marge
     state.lrweights = lrweights
+    state.momentum = momentum
     state.lremb = lremb
     state.lrparam = lrparam
     state.nbatches = nbatches

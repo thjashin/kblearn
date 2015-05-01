@@ -216,6 +216,10 @@ def FB15kexp(state, channel):
             outb = []
             resvalid = RankingScoreIdx(ranklfunc, rankrfunc,
                     validlidx, validridx, validoidx)
+            print 'valid left sims:'
+            print np.array(resvalid[2])
+            print 'valid right sims:'
+            print np.array(resvalid[3])
             state.valid = np.mean(resvalid[0] + resvalid[1])
             restrain = RankingScoreIdx(ranklfunc, rankrfunc,
                     trainlidx, trainridx, trainoidx)

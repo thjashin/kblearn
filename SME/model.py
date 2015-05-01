@@ -1038,13 +1038,19 @@ def RankingScoreIdx(sl, sr, idxl, idxr, idxo):
     :param idxo: list of relation indices.
     """
     errl = []
+    simsl = []
     errr = []
+    simsr = []
     for l, o, r in zip(idxl, idxo, idxr):
-        errl += [np.argsort(np.argsort((
-            sl(r, o)[0]).flatten())[::-1]).flatten()[l] + 1]
-        errr += [np.argsort(np.argsort((
-            sr(l, o)[0]).flatten())[::-1]).flatten()[r] + 1]
-    return errl, errr
+        siml = sl(r, o)[0]
+        simsl.append(siml)
+        errl += [np.argsort(np.argsort(
+            siml.flatten())[::-1]).flatten()[l] + 1]
+        simr = sr(l, o)[0]
+        simsr.append(simr)
+        errr += [np.argsort(np.argsort(
+            simr.flatten())[::-1]).flatten()[r] + 1]
+    return errl, errr, simsl, simsr
 
 
 def RankingScoreRightIdx(sr, idxl, idxr, idxo):

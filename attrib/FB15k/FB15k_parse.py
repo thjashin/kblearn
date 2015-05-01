@@ -1,12 +1,16 @@
 import os
+import re
 import sys
 import json
+import string
 import cPickle
 from collections import defaultdict
 
 import numpy as np
 import scipy.sparse as sp
+from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+
 
 # Put the freebase15k data absolute path here
 datapath = '/home/cc/jxshi/data/FB15k/'
@@ -155,7 +159,8 @@ ENTITY_DESCRIPTION_DATA = pjoin(pdir(pdir(pdir(pabs(__file__)))),
 with open(ENTITY_DESCRIPTION_DATA, 'r') as f:
     items = json.load(f)
 
-
+stopwords_ = set(stopwords.words())
+punctuations = set(string.punctuation)
 word2id = {}
 id2word = {}
 items_seg = []
@@ -164,8 +169,14 @@ for item in items:
     name = item['name']
     desc = item['description']
 
+    # letters only
+    desc = re.sub("[^a-zA-Z]", " ", desc)
+
     # discuss: whether to deal with stopwords
-    words = word_tokenize(desc)
+    words = word_tokenize(desc.lower())
+    # words = filter(lambda x: x not in punctuations, words)
+    words = filter(lambda x: x not in stopwords_, words)
+
     for word in set(words):
         if word not in word2id:
             id_ = len(word2id)
@@ -206,12 +217,16 @@ id2ngram = {}
 for mid, name, words in items_seg:
     for word in set(words):
         word = '#%s#' % word
-        ngrams = [word[i:(i+3)] for i in xrange(len(word) - 2)]
+        ngrams = [word[i:(i+n)] for i in xrange(len(word) - n + 1)]
         for ngram in ngrams:
             if ngram not in ngram2id:
                 id_ = len(ngram2id)
                 ngram2id[ngram] = id_
                 id2ngram[id_] = ngram
+
+# for k in sorted(ngram2id.keys()):
+#     print k,
+# print
 
 print 'len(ngram2id):', len(ngram2id)
 print 'len(id2ngram):', len(id2ngram)
@@ -226,19 +241,24 @@ entity_ngrams_dic = defaultdict(int)
 entity_ngrams = sp.lil_matrix(
     (np.max(entity2idx.values()) + 1, len(ngram2id)), dtype='float32')
 
+ngramcnt = defaultdict(int)
 for mid, name, words in items_seg:
     id_ = entity2idx[mid]
     for word in words:
         word = '#%s#' % word
-        ngrams = [word[i:(i+3)] for i in xrange(len(word) - 2)]
+        ngrams = [word[i:(i+n)] for i in xrange(len(word) - n + 1)]
         for ngram in ngrams:
             entity_ngrams_dic[(id_, ngram2id[ngram])] += 1
+            ngramcnt[ngram] += 1
+
+# for k, v in sorted(ngramcnt.items()):
+#     print k, v
 
 for k, v in entity_ngrams_dic.iteritems():
     entity_ngrams[k[0], k[1]] = v
 
 print 'entity_ngrams.shape:', entity_ngrams.shape
 
-with open('../data/FB15k-bag-of-ngrams.pkl', 'w') as f:
+with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
     cPickle.dump(entity_ngrams.tocsr(), f, -1)
 

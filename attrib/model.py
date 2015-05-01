@@ -871,6 +871,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     lrparams = T.scalar('lrparams')
     lrembeddings = T.scalar('lrembeddings')
     lrweights = T.scalar('lrweights')
+    momentum = T.scalar('momentum')
 
     # Graph
     lhs = sem_model.get_output(sem_inputl)
@@ -889,7 +890,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     costr, outr = margincost(simi, simirn, marge)
     cost = costl + costr
     out = T.concatenate([outl, outr])
-    list_in = [lrweights, lrembeddings, lrparams,
+    list_in = [lrweights, momentum, lrembeddings, lrparams,
                sem_inputl, sem_inputr, inpo, sem_inputln, sem_inputrn]
     if rel:
         # If rel is True, we also consider a negative relation member
@@ -912,24 +913,33 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
         gradientsparams = T.grad(cost, leftop.params + rightop.params)
         updates = OrderedDict((i, i - lrparams * j) for i, j in zip(
             leftop.params + rightop.params, gradientsparams))
-    gradients_weights = T.grad(cost, weights)
-    for w, grad_w in zip(weights, gradients_weights):
-        new_w = w - lrweights * grad_w
-        updates.update({w: new_w})
+    # use SGD with momentum for semantic modeling neural network
+    w_updates = lasagne.updates.nesterov_momentum(
+            cost, weights, lrweights, momentum)
+    updates.update(w_updates)
+
+    # gradients_weights = T.grad(cost, weights)
+    # for w, grad_w in zip(weights, gradients_weights):
+    #     new_w = w - lrweights * grad_w
+    #     updates.update({w: new_w})
 
     if type(embeddings) == list:
         # If there are different embeddings for the relation member.
-        gradients_embedding = T.grad(cost, relationl.E)
-        newE = relationl.E - lrparams * gradients_embedding
-        updates.update({relationl.E: newE})
-        gradients_embedding = T.grad(cost, relationr.E)
-        newE = relationr.E - lrparams * gradients_embedding
-        updates.update({relationr.E: newE})
+        # gradients_embedding = T.grad(cost, relationl.E)
+        # newE = relationl.E - lrparams * gradients_embedding
+        # updates.update({relationl.E: newE})
+        # gradients_embedding = T.grad(cost, relationr.E)
+        # newE = relationr.E - lrparams * gradients_embedding
+        # updates.update({relationr.E: newE})
+        relation_updates = lasagne.updates.nesterov_momentum(
+                cost, [relationl.E, relationr.E], lrparams, momentum)
+        updates.update(relation_updates)
     """
     Theano function inputs.
     :input lrweights: learning rate for the semantic modeling weights.
     :input lrembeddings: learning rate for the embeddings.
     :input lrparams: learning rate for the parameters.
+    :input momentum: momentum SGD
     :input sem_inputl: sparse csr matrix representing the indexes of the positive
                        triplet 'left' member, shape=(#examples,N [Embeddings]).
     :input sem_inputr: sparse csr matrix representing the indexes of the positive
@@ -949,8 +959,8 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     :output mean(out): ratio of examples for which the margin is violated,
                        i.e. for which an update occurs.
     """
-    return theano.function(list_in, [T.mean(cost), T.mean(out), lhs, rhs],
-            updates=updates, on_unused_input='ignore')
+    return theano.function(list_in, [T.mean(cost), T.mean(out)],
+                           updates=updates, on_unused_input='ignore')
 
 
 def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
@@ -1135,7 +1145,7 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     return theano.function(list_in, list_out, on_unused_input='ignore')
 
 
-def RankingScoreIdx(sl, sr, sem_inputl, sem_inputr, idxo):
+def RankingScoreIdx(sl, sr, idxl, sem_inputl, idxr, sem_inputr, idxo):
     """
     This function computes the rank list of the lhs and rhs, over a list of
     lhs, rhs and rel indexes.
@@ -1150,10 +1160,24 @@ def RankingScoreIdx(sl, sr, sem_inputl, sem_inputr, idxo):
     errl = []
     errr = []
     for l, o, r in zip(range(sem_inputl.shape[0]), idxo, range(sem_inputr.shape[0])):
-        errl += [np.argsort(np.argsort((
-            sl(sem_inputr[r], o)[0]).flatten())[::-1]).flatten()[l] + 1]
-        errr += [np.argsort(np.argsort((
-            sr(sem_inputl[l], o)[0]).flatten())[::-1]).flatten()[r] + 1]
+        siml = sl(sem_inputr[r], o)[0]
+        errl += [np.argsort(np.argsort(
+            siml.flatten())[::-1]).flatten()[idxl[l]] + 1]
+        simr = sr(sem_inputl[l], o)[0]
+        errr += [np.argsort(np.argsort(
+            simr.flatten())[::-1]).flatten()[idxr[r]] + 1]
+    return errl, errr
+
+
+def FastRankingScoreIdx(sl, sr, idxl, sem_inputl, idxr, sem_inputr, idxo):
+    errl = []
+    errr = []
+    N = len(idxl)
+    for i in xrange(N):
+        siml = sl(sem_inputr[i], idxo[i])[0]
+        errl.append((siml > siml[idxl[i]]).sum())
+        simr = sr(sem_inputl[i], idxo[i])[0]
+        errr.append((simr > simr[idxr[i]]).sum())
     return errl, errr
 
 
