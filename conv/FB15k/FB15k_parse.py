@@ -10,7 +10,7 @@ import numpy as np
 import scipy.sparse as sp
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from gensim.models import word2vec
+import word2vec
 
 
 # Put the freebase15k data absolute path here
@@ -267,10 +267,15 @@ with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
 ###########################################################
 ### Creation of concatenate word vector feature for text
 
-WORD_VEC_FILE = '/home/cc/jxshi/data/word2vec/GoogleNews-vectors-negative300.bin.gz'
-wordvec = word2vec.Word2Vec.load_word2vec_format(
-    WORD_VEC_FILE, binary=True)
-word_vec_dims = wordvec['king'].shape[0]
+WORD_VEC_FILE = '/home/cc/jxshi/data/word2vec/vectors-50.bin'
+wordvec = word2vec.load(WORD_VEC_FILE)
+vectors = wordvec.vectors
+vocab = wordvec.vocab
+word2idx = {}
+for i, w in enumerate(vocab):
+    word2idx[w] = i
+
+word_vec_dims = vectors[word2idx['king']].shape[0]
 print 'word_vec_dims:', word_vec_dims
 
 # Check coverage of word vectors on vocabulary
@@ -278,7 +283,7 @@ total = len(word2id)
 cnt = 0
 miss = []
 for word in word2id:
-    if word in wordvec:
+    if word in word2idx:
         cnt += 1
     else:
         miss.append(word)
@@ -287,8 +292,7 @@ print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
 
 # Check max/min length of input text
 items_seg = []
-min_len = 1e6
-max_len = 0
+lens = []
 for item in items:
     mid = item['mid']
     name = item['name']
@@ -296,13 +300,15 @@ for item in items:
     # letters only
     desc = re.sub("[^a-zA-Z]", " ", desc).lower()
     words = word_tokenize(desc.lower())
-    min_len = min(min_len, len(words))
-    max_len = max(max_len, len(words))
+    lens.append(len(words))
     items_seg.append((mid, name, words))
-print 'input text length: min(%d) / max(%d)' % (min_len, max_len)
+print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
+    min(lens), max(lens), np.mean(lens), np.median(lens))
 
-limit_len = 1000
-max_len = min(max_len, limit_len)
+limit_len = 240
+max_len = min(max(lens), limit_len)
+print 'feature length:', max_len
+print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 
 # with open('miss.txt', 'w') as f:
 #     for word in miss:
@@ -313,8 +319,8 @@ entity_inputs = np.zeros((np.max(entity2idx.values()) + 1, max_len * word_vec_di
 for mid, name, words in items_seg:
     id_ = entity2idx[mid]
     if words:
-        sen_vec = np.hstack([wordvec[w] if w in wordvec
-                         else np.zeros(300) for w in words]).astype('float32')
+        sen_vec = np.hstack([vectors[word2idx[w]] if w in word2idx
+                         else np.zeros(300) for w in words]).astype('float32')[:max_len]
         entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
 
 np.savez_compressed('../data/FB15k-concat-word-vectors.npz', entity_inputs=entity_inputs)
