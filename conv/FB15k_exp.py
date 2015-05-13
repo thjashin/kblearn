@@ -91,8 +91,9 @@ def FB15kexp(state, channel):
             os.mkdir(state.savepath)
 
     # load concatenate word vector features of entities
-    entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
-        'entity_inputs'].astype(theano.config.floatX)
+    # entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
+    #     'entity_inputs'].astype(theano.config.floatX) * 10
+    entity_inputs = load_file(state.datapath + state.dataset + '-bag-of-3grams.pkl').astype(theano.config.floatX).toarray()
     M, N = entity_inputs.shape
     entity_inputs = entity_inputs.reshape((M, 1, N))
     entity_inputs_shared = shared_sem_inputs(entity_inputs)
@@ -180,14 +181,15 @@ def FB15kexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_inputs.shape[2], state.ndim, batch_size=None)
+    sem_model = build_model(entity_inputs.shape[2], state.ndim, batch_size=batchsize)
+    # sem_model = build_model(entity_inputs.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
             rightop, marge=state.marge, rel=False)
     ranklfunc = RankLeftFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
             rightop, subtensorspec=state.Nsyn)
     rankrfunc = RankRightFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
             rightop, subtensorspec=state.Nsyn)
-    
+
     valid_sem_inputl = entity_inputs[validlidx_eval]
     valid_sem_inputr = entity_inputs[validridx_eval]
     train_sem_inputl = entity_inputs[trainlidx_eval]
@@ -198,7 +200,8 @@ def FB15kexp(state, channel):
     out = []
     outb = []
     state.bestvalid = -1
-
+    relation_update_ratio = []
+    
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
     for epoch_count in xrange(1, state.totepochs + 1):
@@ -207,13 +210,18 @@ def FB15kexp(state, channel):
         trainl = trainl[:, order]
         trainr = trainr[:, order]
         traino = traino[:, order]
-        
+        trainlidx = trainlidx[order]
+        trainridx = trainridx[order]
+        trainoidx = trainoidx[order]
+
         # Negatives
         trainln = create_random_mat(trainl.shape, np.arange(state.Nsyn))
         trainrn = create_random_mat(trainr.shape, np.arange(state.Nsyn))
         trainlnidx = convert2idx(trainln)
         trainrnidx = convert2idx(trainrn)
 
+        lhs_norms = []
+        
         for i in range(state.nbatches):
             # tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
             # tmpr = trainr[:, i * batchsize:(i + 1) * batchsize]
@@ -233,24 +241,36 @@ def FB15kexp(state, channel):
             sem_inputr = entity_inputs[tmpr_idx]
             sem_inputnl = entity_inputs[tmpnl_idx]
             sem_inputnr = entity_inputs[tmpnr_idx]
+            # print 'sem_inputl.shape:', sem_inputl.shape
 
             # training iteration
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            out += [outtmp[0] / float(batchsize)]
-            outb += [outtmp[1]]
+            # [cost, lhs, rhs, lhsn, rhsn, rell, relr, relation_updates] = outtmp[2:]
+            # lhs_emb = outtmp[2]
+            # relation_updates = np.array(outtmp[2])
+            # relation_update_ratio.append(np.linalg.norm(relation_updates) / np.linalg.norm(embeddings[1].E.get_value()))
+            lhs = outtmp[2]
+            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
+            lhs_norms.append(lhs_norm)
+            out.append(outtmp[0] / float(batchsize))
+            outb.append(outtmp[1])
             # embeddings normalization
             # if type(embeddings) is list:
             #     embeddings[0].normalize()
             # else:
             #     embeddings.normalize()
             if i > 0 and i % state.printbatches == 0:
-                print >> sys.stderr, 'Epoch %d, batch %d, cost: %f' % (
+                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
                     epoch_count, i, out[-1])
+                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
+                lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))
+        # print >> sys.stderr, 'relation update ratio: %f' % np.mean(relation_update_ratio)
+        # relation_update_ratio = []
 
         if (epoch_count % state.test_all) == 0:
             # model evaluation

@@ -228,6 +228,7 @@ def FB15kexp(state, channel):
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
             out += [outtmp[0] / float(batchsize)]
             outb += [outtmp[1]]
+            # print 'relation updates:', outtmp[2]
             # embeddings normalization
             # if type(embeddings) is list:
             #     embeddings[0].normalize()

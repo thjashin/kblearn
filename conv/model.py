@@ -865,9 +865,13 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     # Inputs
     sem_inputl = T.tensor3()
     sem_inputr = T.tensor3()
+    # sem_inputl = T.matrix()
+    # sem_inputr = T.matrix()
     inpo = S.csr_matrix()
     sem_inputln = T.tensor3()
     sem_inputrn = T.tensor3()
+    # sem_inputln = T.matrix()
+    # sem_inputrn = T.matrix()
     lrparams = T.scalar('lrparams')
     lrembeddings = T.scalar('lrembeddings')
     lrweights = T.scalar('lrweights')
@@ -959,7 +963,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     :output mean(out): ratio of examples for which the margin is violated,
                        i.e. for which an update occurs.
     """
-    return theano.function(list_in, [T.mean(cost), T.mean(out)],
+    return theano.function(list_in, [T.mean(cost), T.mean(out), lhs], #relation_updates.values()[0] - relation_updates.keys()[0]],
                            updates=updates, on_unused_input='ignore')
 
 

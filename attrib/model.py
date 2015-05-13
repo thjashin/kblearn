@@ -959,7 +959,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     :output mean(out): ratio of examples for which the margin is violated,
                        i.e. for which an update occurs.
     """
-    return theano.function(list_in, [T.mean(cost), T.mean(out)],
+    return theano.function(list_in, [T.mean(cost), T.mean(out), relation_updates.values()[0] - relation_updates.keys()[0]],
                            updates=updates, on_unused_input='ignore')
 
 
