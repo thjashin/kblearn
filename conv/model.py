@@ -10,17 +10,21 @@ import scipy.sparse
 import theano
 import theano.sparse as S
 import theano.tensor as T
+from theano.compile import DebugMode
 import lasagne
 from collections import OrderedDict
 
 
 # Similarity functions -------------------------------------------------------
 def L1sim(left, right):
-    return - T.sum(T.abs_(left - right), axis=1)
-
+    eps = 1e-8
+    dis = left - right
+    return - T.sum(-dis * (dis < -eps) + dis * (dis > eps), axis=1)
+    # return -T.sum(T.abs_(left - right), axis=1)
 
 def L2sim(left, right):
-    return - T.sqrt(T.sum(T.sqr(left - right), axis=1))
+    eps = 1e-6  # avoid NaN gradient when T.sqrt(0)
+    return - T.sqrt(T.sum(T.sqr(left - right), axis=1) + eps)
 
 
 def Dotsim(left, right):
@@ -578,7 +582,7 @@ def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, su
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    sem_inputl = T.tensor3('sem_inputl')
+    sem_inputl = T.tensor4('sem_inputl')
     idxo = T.iscalar('idxo')
 
     # Graph
@@ -623,7 +627,7 @@ def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, sub
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    sem_inputr = T.tensor3('sem_inputr')
+    sem_inputr = T.tensor4('sem_inputr')
     idxo = T.iscalar('idxo')
 
     # Graph
@@ -863,13 +867,13 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     weights = lasagne.layers.get_all_params(sem_model)
 
     # Inputs
-    sem_inputl = T.tensor3()
-    sem_inputr = T.tensor3()
+    sem_inputl = T.tensor4()
+    sem_inputr = T.tensor4()
     # sem_inputl = T.matrix()
     # sem_inputr = T.matrix()
     inpo = S.csr_matrix()
-    sem_inputln = T.tensor3()
-    sem_inputrn = T.tensor3()
+    sem_inputln = T.tensor4()
+    sem_inputrn = T.tensor4()
     # sem_inputln = T.matrix()
     # sem_inputrn = T.matrix()
     lrparams = T.scalar('lrparams')
@@ -964,7 +968,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
                        i.e. for which an update occurs.
     """
     return theano.function(list_in, [T.mean(cost), T.mean(out), lhs], #relation_updates.values()[0] - relation_updates.keys()[0]],
-                           updates=updates, on_unused_input='ignore')
+                           updates=updates, on_unused_input='ignore') # mode=DebugMode(check_py_code=False))
 
 
 def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
@@ -1177,11 +1181,11 @@ def FastRankingScoreIdx(sl, sr, idxl, sem_inputl, idxr, sem_inputr, idxo):
     errl = []
     errr = []
     N = len(idxl)
-    K, _, L = sem_inputl.shape
+    K, _, _, L = sem_inputl.shape
     for i in xrange(N):
-        siml = sl(sem_inputr[i].reshape(1, 1, L), idxo[i])[0]
+        siml = sl(sem_inputr[i].reshape(1, 1, 1, L), idxo[i])[0]
         errl.append((siml > siml[idxl[i]]).sum())
-        simr = sr(sem_inputl[i].reshape(1, 1, L), idxo[i])[0]
+        simr = sr(sem_inputl[i].reshape(1, 1, 1, L), idxo[i])[0]
         errr.append((simr > simr[idxr[i]]).sum())
     return errl, errr
 

@@ -91,11 +91,11 @@ def FB15kexp(state, channel):
             os.mkdir(state.savepath)
 
     # load concatenate word vector features of entities
-    # entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
-    #     'entity_inputs'].astype(theano.config.floatX) * 10
-    entity_inputs = load_file(state.datapath + state.dataset + '-bag-of-3grams.pkl').astype(theano.config.floatX).toarray()
+    entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
+        'entity_inputs'].astype(theano.config.floatX) * 200
+    # entity_inputs = load_file(state.datapath + state.dataset + '-bag-of-3grams.pkl').astype(theano.config.floatX).toarray()
     M, N = entity_inputs.shape
-    entity_inputs = entity_inputs.reshape((M, 1, N))
+    entity_inputs = entity_inputs.reshape((M, 1, 1, N))
     entity_inputs_shared = shared_sem_inputs(entity_inputs)
     print 'entity_inputs.shape:', entity_inputs.shape
 
@@ -181,7 +181,7 @@ def FB15kexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_inputs.shape[2], state.ndim, batch_size=batchsize)
+    sem_model = build_model(entity_inputs.shape[3], state.ndim, batch_size=batchsize)
     # sem_model = build_model(entity_inputs.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
             rightop, marge=state.marge, rel=False)
