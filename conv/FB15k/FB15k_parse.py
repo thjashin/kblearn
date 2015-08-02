@@ -14,7 +14,7 @@ import word2vec
 
 
 # Put the freebase15k data absolute path here
-datapath = '/home/cc/jxshi/data/FB15k/'
+datapath = '/home/jiaxin/mfs/data/FB15k/'
 assert datapath is not None
 
 if 'data' not in os.listdir('../'):
@@ -267,7 +267,7 @@ with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
 ###########################################################
 ### Creation of concatenate word vector feature for text
 
-WORD_VEC_FILE = '/home/cc/jxshi/data/word2vec/vectors-50.bin'
+WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
 wordvec = word2vec.load(WORD_VEC_FILE)
 vectors = wordvec.vectors
 vocab = wordvec.vocab

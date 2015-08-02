@@ -560,7 +560,7 @@ def SimFnIdx(fnsim, embeddings, leftop, rightop):
             on_unused_input='ignore')
 
 
-def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankRightFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'right' entities given couples of relation and 'left' entities (as
@@ -579,6 +579,7 @@ def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, su
 
     # Inputs
     sem_inputl = T.vector('sem_inputl')
+    sem_inputsr = T.matrix('sem_inputsr')
     idxo = T.iscalar('idxo')
 
     # Graph
@@ -586,8 +587,8 @@ def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, su
                                1, embedding.D))
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        sem_inputs = sem_inputs[:subtensorspec]
-    rhs = sem_model.get_output(sem_inputs, deterministic=True)
+        sem_inputsr = sem_inputsr[:subtensorspec]
+    rhs = sem_model.get_output(sem_inputsr, deterministic=True)
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = leftop(lhs, rell)
@@ -601,11 +602,11 @@ def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, su
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([sem_inputl, idxo], [simi],
+    return theano.function([sem_inputl, sem_inputsr, idxo], [simi],
                            on_unused_input='ignore')
 
 
-def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankLeftFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'left' entities given couples of relation and 'right' entities (as
@@ -623,14 +624,15 @@ def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, sub
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
+    sem_inputsl = T.matrix('sem_inputsl')
     sem_inputr = T.vector('sem_inputr')
     idxo = T.iscalar('idxo')
 
     # Graph
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        sem_inputs = sem_inputs[:subtensorspec]
-    lhs = sem_model.get_output(sem_inputs, deterministic=True)
+        sem_inputsl = sem_inputsl[:subtensorspec]
+    lhs = sem_model.get_output(sem_inputsl, deterministic=True)
     rhs = sem_model.get_output(sem_inputr, deterministic=True).reshape((
                                1, embedding.D))
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
@@ -646,8 +648,18 @@ def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, sub
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([sem_inputr, idxo], [simi],
+    return theano.function([sem_inputr, sem_inputsl, idxo], [simi],
                            on_unused_input='ignore')
+
+
+def RankFnIdx(fnbatch, sem_input_csr, sing_item, idxo, batchsize):
+    M, N = sem_input_csr.shape
+    nbatches = np.ceil(N * 1.0 / batchsize)
+    simis = []
+    for i in xrange(nbatches):
+        sem_input_batch = sem_input_csr[i * batchsize:(i + 1) * batchsize].toarray()
+        simis.append(fnbatch(sing_item, sem_input_batch, idxo))
+    return np.hstack(simis)
 
 
 def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
@@ -701,6 +713,18 @@ def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     """
     return theano.function([idxl, idxr], [simi],
             on_unused_input='ignore')
+
+
+def FastRankingScoreIdx(sl_batch, sr_batch, sem_input_csr, idxl, sem_inputl, idxr, sem_inputr, idxo, batchsize):
+    errl = []
+    errr = []
+    N = len(idxl)
+    for i in xrange(N):
+        siml = RankFnIdx(sl_batch, sem_input_csr, sem_inputr[i], idxo[i], batchsize)[0]
+        errl.append((siml > siml[idxl[i]]).sum())
+        simr = RankFnIdx(sr_batch, sem_input_csr, sem_inputl[i], idxo[i], batchsize)[0]
+        errr.append((simr > simr[idxr[i]]).sum())
+    return errl, errr
 
 
 def TrainFn(fnsim, embeddings, leftop, rightop, marge=1.0):
@@ -1166,18 +1190,6 @@ def RankingScoreIdx(sl, sr, idxl, sem_inputl, idxr, sem_inputr, idxo):
         simr = sr(sem_inputl[l], o)[0]
         errr += [np.argsort(np.argsort(
             simr.flatten())[::-1]).flatten()[idxr[r]] + 1]
-    return errl, errr
-
-
-def FastRankingScoreIdx(sl, sr, idxl, sem_inputl, idxr, sem_inputr, idxo):
-    errl = []
-    errr = []
-    N = len(idxl)
-    for i in xrange(N):
-        siml = sl(sem_inputr[i], idxo[i])[0]
-        errl.append((siml > siml[idxl[i]]).sum())
-        simr = sr(sem_inputl[i], idxo[i])[0]
-        errr.append((simr > simr[idxr[i]]).sum())
     return errl, errr
 
 

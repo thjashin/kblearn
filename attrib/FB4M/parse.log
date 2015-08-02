@@ -1,0 +1,10 @@
+entity_ngrams.shape: (4661857, 18188)
+len(ngram2id): 18188
+len(id2ngram): 18188
+# of only_left/shared/only_right entities:  374564 / 3762227 / 525069
+Number of relations:  2660
+train
+valid
+test
+6
+3

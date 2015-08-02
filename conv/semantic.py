@@ -11,23 +11,33 @@ def build_model(input_dim, output_dim, batch_size=None):
     l_in = lasagne.layers.InputLayer(
         shape=(batch_size, 1, 1, input_dim),
     )
-    l_conv1 = dnn.Conv2DDNNLayer(
+    l_conv11 = dnn.Conv2DDNNLayer(
         l_in,
         num_filters=32,
-        filter_size=(1, 11),
-        strides=(1, 4),
+        filter_size=(1, 50),
+        strides=(1, 50),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+    )
+    l_conv12 = dnn.Conv2DDNNLayer(
+        l_conv11,
+        num_filters=32,
+        filter_size=(1, 3),
+        strides=(1, 1),
+        border_mode='same',
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
     l_pool1 = dnn.MaxPool2DDNNLayer(
-        l_conv1,
+        l_conv12,
         ds=(1, 2),
     )
     l_conv2 = dnn.Conv2DDNNLayer(
         l_pool1,
         num_filters=64,
-        filter_size=(1, 5),
-        strides=(1, 2),
+        filter_size=(1, 3),
+        strides=(1, 1),
+        border_mode='same',
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
@@ -40,6 +50,7 @@ def build_model(input_dim, output_dim, batch_size=None):
         num_filters=128,
         filter_size=(1, 3),
         strides=(1, 1),
+        border_mode='same',
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
@@ -52,6 +63,7 @@ def build_model(input_dim, output_dim, batch_size=None):
         num_filters=256,
         filter_size=(1, 3),
         strides=(1, 1),
+        border_mode='same',
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
@@ -59,20 +71,8 @@ def build_model(input_dim, output_dim, batch_size=None):
         l_conv4,
         ds=(1, 2),
     )
-    l_conv5 = dnn.Conv2DDNNLayer(
-        l_pool4,
-        num_filters=512,
-        filter_size=(1, 3),
-        strides=(1, 1),
-        nonlinearity=lasagne.nonlinearities.rectify,
-        W=lasagne.init.GlorotUniform(),
-    )
-    l_pool5 = dnn.MaxPool2DDNNLayer(
-        l_conv5,
-        ds=(1, 2),
-    )
     l_fc1 = lasagne.layers.DenseLayer(
-        l_pool5,
+        l_pool4,
         num_units=500,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),

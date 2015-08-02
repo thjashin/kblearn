@@ -238,28 +238,19 @@ with open('../data/FB15k_id2%dgram.pkl' % n, 'w') as f:
     cPickle.dump(id2ngram, f, -1)
 
 
-entity_ngrams_dic = defaultdict(int)
 entity_ngrams = sp.lil_matrix(
     (np.max(entity2idx.values()) + 1, len(ngram2id)), dtype='float32')
 
-ngramcnt = defaultdict(int)
 for mid, name, words in items_seg:
     id_ = entity2idx[mid]
     for word in words:
         word = '#%s#' % word
         ngrams = [word[i:(i+n)] for i in xrange(len(word) - n + 1)]
         for ngram in ngrams:
-            entity_ngrams_dic[(id_, ngram2id[ngram])] += 1
-            ngramcnt[ngram] += 1
-
-# for k, v in sorted(ngramcnt.items()):
-#     print k, v
-
-for k, v in entity_ngrams_dic.iteritems():
-    entity_ngrams[k[0], k[1]] = np.log(v + 1.0)
+            entity_ngrams[(id_, ngram2id[ngram])] += 1
 
 print 'entity_ngrams.shape:', entity_ngrams.shape
 
 with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
-    cPickle.dump(entity_ngrams.tocsr(), f, -1)
+    cPickle.dump(entity_ngrams.tocsr().log1p(), f, -1)
 
