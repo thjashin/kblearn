@@ -1,16 +1,10 @@
-import os
-import sys
-import time
 import copy
-import cPickle
+from collections import OrderedDict
 
 import numpy as np
-import scipy
-import scipy.sparse
 import theano
 import theano.sparse as S
 import theano.tensor as T
-from collections import OrderedDict
 
 
 # Similarity functions -------------------------------------------------------
@@ -704,7 +698,7 @@ def TrainFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge For the cost function.
+    :param marge: margin For the cost function.
     """
     embedding, relationl, relationr = parse_embeddings(embeddings)
     # Inputs
@@ -794,7 +788,7 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
 
     :note: this is useful for W_SABIE [Weston et al., IJCAI 2011]
     """
@@ -856,7 +850,7 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
     """
@@ -961,7 +955,7 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
 

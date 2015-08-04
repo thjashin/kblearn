@@ -1,6 +1,5 @@
 #! /usr/bin/python
 
-import lasagne
 from model import *
 from semantic import build_model
 
@@ -181,7 +180,7 @@ def FB15kexp(state, channel):
     # Function compilation
     sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
-            rightop, marge=state.marge, rel=False)
+                              rightop, margin=state.marge, rel=False)
     ranklfunc = RankLeftFnIdx(simfn, entity_ngrams_shared, sem_model, embeddings, leftop,
             rightop, subtensorspec=state.Nsyn)
     rankrfunc = RankRightFnIdx(simfn, entity_ngrams_shared, sem_model, embeddings, leftop,

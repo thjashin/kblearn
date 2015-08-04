@@ -1,11 +1,8 @@
 import os
 import re
 import gc
-import sys
-import json
 import string
 import cPickle
-from collections import defaultdict
 
 import numpy as np
 import scipy.sparse as sp
@@ -23,7 +20,7 @@ def load_sparse_csr(filename):
                          shape=loader['shape'])
 
 
-# Put the freebase15k data absolute path here
+# Put the freebase4M data absolute path here
 datapath = '/mfs/jiaxin/data/freebase-has-desc/'
 rand_split_path = os.path.join(datapath, 'rand-split') + '/'
 

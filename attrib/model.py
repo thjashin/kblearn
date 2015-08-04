@@ -1,17 +1,12 @@
-import os
-import sys
-import time
 import copy
-import cPickle
+from collections import OrderedDict
 
 import numpy as np
-import scipy
-import scipy.sparse
 import theano
 import theano.sparse as S
 import theano.tensor as T
+
 import lasagne
-from collections import OrderedDict
 
 
 # Similarity functions -------------------------------------------------------
@@ -560,7 +555,7 @@ def SimFnIdx(fnsim, embeddings, leftop, rightop):
             on_unused_input='ignore')
 
 
-def BatchRankRightFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'right' entities given couples of relation and 'left' entities (as
@@ -578,35 +573,33 @@ def BatchRankRightFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensor
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    sem_inputl = T.vector('sem_inputl')
-    sem_inputsr = T.matrix('sem_inputsr')
+    lhs = T.vector('lhs')
+    rhs = T.matrix('rhs')
     idxo = T.iscalar('idxo')
 
     # Graph
-    lhs = sem_model.get_output(sem_inputl, deterministic=True).reshape((
-                               1, embedding.D))
+    lhs = lhs.reshape((1, embedding.D))
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        sem_inputsr = sem_inputsr[:subtensorspec]
-    rhs = sem_model.get_output(sem_inputsr, deterministic=True)
+        rhs = rhs[:subtensorspec]
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = leftop(lhs, rell)
     simi = fnsim(tmp.reshape((1, tmp.shape[1])), rightop(rhs, relr))
     """
     Theano function inputs.
-    :input sem_inputl: the semantic input of the left entity.
-    :input sem_inputsr: all the semantic inputs of right entities
+    :input lhs: the embedding of the left entity.
+    :input rhs: all the embeddings of right entities
     :input idxo: index value of the relation member.
 
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([sem_inputl, sem_inputsr, idxo], [simi],
+    return theano.function([lhs, rhs, idxo], [simi],
                            on_unused_input='ignore')
 
 
-def BatchRankLeftFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     """
     This function returns a Theano function to measure the similarity score of
     all 'left' entities given couples of relation and 'right' entities (as
@@ -624,41 +617,39 @@ def BatchRankLeftFnIdx(fnsim, sem_model, embeddings, leftop, rightop, subtensors
     embedding, relationl, relationr = parse_embeddings(embeddings)
 
     # Inputs
-    sem_inputsl = T.matrix('sem_inputsl')
-    sem_inputr = T.vector('sem_inputr')
+    lhs = T.matrix('lhs')
+    rhs = T.vector('rhs')
     idxo = T.iscalar('idxo')
 
     # Graph
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
-        sem_inputsl = sem_inputsl[:subtensorspec]
-    lhs = sem_model.get_output(sem_inputsl, deterministic=True)
-    rhs = sem_model.get_output(sem_inputr, deterministic=True).reshape((
-                               1, embedding.D))
+        lhs = lhs[:subtensorspec]
+    rhs = rhs.reshape((1, embedding.D))
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = rightop(rhs, relr)
     simi = fnsim(leftop(lhs, rell), tmp.reshape((1, tmp.shape[1])))
     """
     Theano function inputs.
-    :input sem_inputr: semantic input of the 'right' member.
-    :input sem_inputsl: all semantic inputs of 'left' entities.
+    :input rhs: embedding of the 'right' member.
+    :input lhs: all embeddings of 'left' entities.
     :input idxo: index value of the relation member.
 
     Theano function output.
     :output simi: vector of score values.
     """
-    return theano.function([sem_inputr, sem_inputsl, idxo], [simi],
+    return theano.function([rhs, lhs, idxo], [simi],
                            on_unused_input='ignore')
 
 
-def RankFnIdx(fnbatch, sem_input_csr, sing_item, idxo, batchsize):
-    M, N = sem_input_csr.shape
-    nbatches = np.ceil(N * 1.0 / batchsize)
+def RankFnIdx(fnbatch, embeddings, sing_item, idxo, batchsize):
+    M, N = embeddings.shape
+    nbatches = np.ceil(M * 1.0 / batchsize)
     simis = []
     for i in xrange(nbatches):
-        sem_input_batch = sem_input_csr[i * batchsize:(i + 1) * batchsize].toarray()
-        simis.append(fnbatch(sing_item, sem_input_batch, idxo))
+        sem_batch = embeddings[i * batchsize:(i + 1) * batchsize]
+        simis.append(fnbatch(sing_item, sem_batch, idxo))
     return np.hstack(simis)
 
 
@@ -715,19 +706,19 @@ def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
             on_unused_input='ignore')
 
 
-def FastRankingScoreIdx(sl_batch, sr_batch, sem_input_csr, idxl, sem_inputl, idxr, sem_inputr, idxo, batchsize):
+def FastRankingScoreIdx(sl_batch, sr_batch, embeddings, idxl, idxr, idxo, batchsize):
     errl = []
     errr = []
     N = len(idxl)
     for i in xrange(N):
-        siml = RankFnIdx(sl_batch, sem_input_csr, sem_inputr[i], idxo[i], batchsize)[0]
+        siml = RankFnIdx(sl_batch, embeddings, embeddings[idxr[i]], idxo[i], batchsize)[0]
         errl.append((siml > siml[idxl[i]]).sum())
-        simr = RankFnIdx(sr_batch, sem_input_csr, sem_inputl[i], idxo[i], batchsize)[0]
+        simr = RankFnIdx(sr_batch, embeddings, embeddings[idxl[i]], idxo[i], batchsize)[0]
         errr.append((simr > simr[idxr[i]]).sum())
     return errl, errr
 
 
-def TrainFn(fnsim, embeddings, leftop, rightop, marge=1.0):
+def Fn(fnsim, embeddings, leftop, rightop, marge=1.0):
     """
     This function returns a theano function to perform a training iteration,
     contrasting couples of positive and negative triplets. members are given
@@ -738,7 +729,7 @@ def TrainFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge For the cost function.
+    :param marge: margin For the cost function.
     """
     embedding, relationl, relationr = parse_embeddings(embeddings)
     # Inputs
@@ -828,7 +819,7 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
 
     :note: this is useful for W_SABIE [Weston et al., IJCAI 2011]
     """
@@ -878,11 +869,7 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
                            on_unused_input='ignore')
 
 
-def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=True):
-    """
-    :param sem_ents: semantic entities, the output of semantic modeling
-                     neural network
-    """
+def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel=True):
     embedding, relationl, relationr = parse_embeddings(embeddings)
     weights = lasagne.layers.get_all_params(sem_model)
 
@@ -910,8 +897,8 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
     similn = fnsim(leftop(lhsn, rell), rightop(rhs, relr))
     # Negative right member
     simirn = fnsim(leftop(lhs, rell), rightop(rhsn, relr))
-    costl, outl = margincost(simi, similn, marge)
-    costr, outr = margincost(simi, simirn, marge)
+    costl, outl = margincost(simi, similn, margin)
+    costr, outr = margincost(simi, simirn, margin)
     cost = costl + costr
     out = T.concatenate([outl, outr])
     list_in = [lrweights, momentum, lrembeddings, lrparams,
@@ -922,7 +909,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, marge=1.0, rel=
         relln = S.dot(relationl.E, inpon).T
         relrn = S.dot(relationl.E, inpon).T
         simion = fnsim(leftop(lhs, relln), rightop(rhs, relrn))
-        costo, outo = margincost(simi, simion, marge)
+        costo, outo = margincost(simi, simion, margin)
         cost += costo
         out = T.concatenate([out, outo])
         list_in += [inpon]
@@ -999,7 +986,7 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
     """
@@ -1104,7 +1091,7 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: marge for the cost function.
+    :param marge: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
 

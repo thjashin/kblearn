@@ -1,16 +1,22 @@
 #! /usr/bin/python
+# -*- coding: utf-8 -*-
 
-import lasagne
-import numpy as np
+import cPickle
+import os
+import sys
+import time
+
 from scipy import sparse as sp
+import scipy
 
 from model import *
 from semantic import build_model
 
+
 # Utils ----------------------------------------------------------------------
 def create_random_mat(shape, listidx=None):
     """
-    This function create a random sparse index matrix with a given shape. It
+    This function crea te a random sparse index matrix with a given shape. It
     is useful to create negative triplets.
 
     :param shape: shape of the desired sparse matrix.
@@ -23,7 +29,7 @@ def create_random_mat(shape, listidx=None):
         listidx = np.arange(shape[0])
     listidx = listidx[np.random.permutation(len(listidx))]
     randommat = scipy.sparse.lil_matrix((shape[0], shape[1]),
-            dtype=theano.config.floatX)
+                                        dtype=theano.config.floatX)
     idx_term = 0
     for idx_ex in range(shape[1]):
         if idx_term == len(listidx):
@@ -35,16 +41,19 @@ def create_random_mat(shape, listidx=None):
 
 def load_file(path):
     return scipy.sparse.csr_matrix(cPickle.load(open(path)),
-            dtype=theano.config.floatX)
+                                   dtype=theano.config.floatX)
+
 
 def save_sparse_csr(filename, array):
     np.savez_compressed(filename, data=array.data, indices=array.indices,
                         indptr=array.indptr, shape=array.shape)
 
+
 def load_sparse_csr(filename):
     loader = np.load(filename)
     return sp.csr_matrix((loader['data'], loader['indices'], loader['indptr']),
                          shape=loader['shape'])
+
 
 def convert2idx(spmat):
     rows, cols = spmat.nonzero()
@@ -79,12 +88,12 @@ class DD(dict):
             z[k] = copy.deepcopy(kv, memo)
         return z
 
+
 # ----------------------------------------------------------------------------
 
 
 # Experiment function --------------------------------------------------------
 def FB4Mexp(state, channel):
-
     # Show experiment parameters
     print >> sys.stderr, state
     np.random.seed(state.seed)
@@ -123,9 +132,11 @@ def FB4Mexp(state, channel):
     testo = load_file(state.datapath + state.dataset + '-test-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         testo = testo[-state.Nrel:, :]
- 
+
     batchsize = trainl.shape[1] / state.nbatches
     eval_batchsize = state.eval_batchsize
+    entity_batchsize = state.entity_batchsize
+    n_entity_batches = state.Nsyn / entity_batchsize
 
     print 'trainl.shape:', trainl.shape
     print 'trainr.shape:', trainr.shape
@@ -142,7 +153,7 @@ def FB4Mexp(state, channel):
     validoidx = convert2idx(valido)[:state.neval]
     testlidx = convert2idx(testl)[:state.neval]
     testridx = convert2idx(testr)[:state.neval]
-    testoidx = convert2idx(testo)[:state.neval] 
+    testoidx = convert2idx(testo)[:state.neval]
 
     print 'trainlidx.shape:', trainlidx.shape
     print 'trainridx.shape:', trainridx.shape
@@ -152,19 +163,19 @@ def FB4Mexp(state, channel):
     if not state.loadmodel:
         # operators
         if state.op == 'Unstructured':
-            leftop  = Unstructured()
+            leftop = Unstructured()
             rightop = Unstructured()
         elif state.op == 'SME_lin':
-            leftop  = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
+            leftop = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
             rightop = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'right')
         elif state.op == 'SME_bil':
-            leftop  = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
+            leftop = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
             rightop = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'right')
         elif state.op == 'SE':
-            leftop  = LayerMat('lin', state.ndim, state.nhid)
+            leftop = LayerMat('lin', state.ndim, state.nhid)
             rightop = LayerMat('lin', state.ndim, state.nhid)
         elif state.op == 'TransE':
-            leftop  = LayerTrans()
+            leftop = LayerTrans()
             rightop = Unstructured()
         # embeddings
         if not state.loademb:
@@ -192,18 +203,11 @@ def FB4Mexp(state, channel):
     # Function compilation
     sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
-            rightop, marge=state.marge, rel=False)
-    batch_ranklfunc = BatchRankLeftFnIdx(simfn, sem_model, embeddings, leftop,
-            rightop, subtensorspec=state.Nsyn)
-    batch_rankrfunc = BatchRankRightFnIdx(simfn, sem_model, embeddings, leftop,
-            rightop, subtensorspec=state.Nsyn)
-
-    valid_sem_inputl = entity_ngrams[validlidx].toarray()
-    valid_sem_inputr = entity_ngrams[validridx].toarray()
-    train_sem_inputl = entity_ngrams[trainlidx].toarray()
-    train_sem_inputr = entity_ngrams[trainridx].toarray()
-    test_sem_inputl = entity_ngrams[testlidx].toarray()
-    test_sem_inputr = entity_ngrams[testridx].toarray()
+                              rightop, margin=state.marge, rel=False)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
+                                         rightop, subtensorspec=state.Nsyn)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
+                                          rightop, subtensorspec=state.Nsyn)
 
     out = []
     outb = []
@@ -252,25 +256,42 @@ def FB4Mexp(state, channel):
         if (epoch_count % state.test_all) == 0:
             # model evaluation
             print >> sys.stderr, "-- EPOCH %s (%s seconds per epoch):" % (
-                    epoch_count,
-                    round(time.time() - timeref, 3) / float(state.test_all))
+                epoch_count,
+                round(time.time() - timeref, 3) / float(state.test_all))
             timeref = time.time()
             print >> sys.stderr, "COST >> %s +/- %s, %% updates: %s%%" % (
-                    round(np.mean(out), 4), round(np.std(out), 4),
-                    round(np.mean(outb) * 100, 3))
+                round(np.mean(out), 4), round(np.std(out), 4),
+                round(np.mean(outb) * 100, 3))
             out = []
             outb = []
+
+            # get sem output for all entities
+            entity_embeddings = []
+            for i in xrange(n_entity_batches):
+                entity_embeddings.append(
+                    sem_model.get_output(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize],
+                                         deterministic=True)
+                )
+            if n_entity_batches * entity_batchsize < state.Nsyn:
+                entity_embeddings.append(
+                    sem_model.get_output(entity_ngrams[n_entity_batches * entity_batchsize:],
+                                         deterministic=True)
+                )
+            entity_embeddings = np.vstack(entity_embeddings)
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                    entity_ngrams, validlidx, valid_sem_inputl, validridx, valid_sem_inputr, validoidx, eval_batchsize)
+                                           entity_embeddings, validlidx, validridx,
+                                           validoidx, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
             restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                    entity_ngrams, trainlidx, train_sem_inputl, trainridx, train_sem_inputr, trainoidx, eval_batchsize)
+                                           entity_embeddings, trainlidx, trainridx,
+                                           trainoidx, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
-                    state.valid, state.train)
+                state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
                 restest = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                        entity_ngrams, testlidx, test_sem_inputl, testridx, test_sem_inputr, testoidx, eval_batchsize)
+                                              entity_embeddings, testlidx, testridx,
+                                              testoidx, eval_batchsize)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
@@ -284,7 +305,7 @@ def FB4Mexp(state, channel):
                 cPickle.dump(simfn, f, -1)
                 f.close()
                 print >> sys.stderr, "\t\t##### NEW BEST VALID >> test: %s" % (
-                        state.besttest)
+                    state.besttest)
             # Save current model
             f = open(state.savepath + '/current_model.pkl', 'w')
             cPickle.dump(sem_model, f, -1)
@@ -301,12 +322,11 @@ def FB4Mexp(state, channel):
     return channel.COMPLETE
 
 
-def launch(datapath='data/', dataset='FB4M', Nent=4661857+2663,
-        Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
-        simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, momentum=0.9,
-        lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
-        seed=123, savepath='.', eval_batchsize=40000):
-
+def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
+           Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
+           simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
+           lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
+           seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
     # Argument of the experiment script
     state = DD()
 
@@ -321,7 +341,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857+2663,
     state.simfn = simfn
     state.ndim = ndim
     state.nhid = nhid
-    state.marge = marge
+    state.margin = margin
     state.lrweights = lrweights
     state.momentum = momentum
     state.lremb = lremb
@@ -333,6 +353,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857+2663,
     state.seed = seed
     state.savepath = savepath
     state.eval_batchsize = eval_batchsize
+    state.entity_batchsize = entity_batchsize
 
     if not os.path.isdir(state.savepath):
         os.mkdir(state.savepath)
@@ -354,6 +375,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857+2663,
     channel = Channel(state)
 
     FB4Mexp(state, channel)
+
 
 if __name__ == '__main__':
     launch()
