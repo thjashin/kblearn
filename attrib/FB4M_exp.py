@@ -16,7 +16,7 @@ from semantic import build_model
 # Utils ----------------------------------------------------------------------
 def create_random_mat(shape, listidx=None):
     """
-    This function crea te a random sparse index matrix with a given shape. It
+    This function create a random sparse index matrix with a given shape. It
     is useful to create negative triplets.
 
     :param shape: shape of the desired sparse matrix.
@@ -115,8 +115,8 @@ def FB4Mexp(state, channel):
     print 'entity_ngrams.shape:', entity_ngrams.shape
 
     # Positives
-    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :][:db_train_size, :]
-    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :][:db_train_size, :]
+    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :][:, :db_train_size]
+    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :][:, :db_train_size]
     traino = load_file(state.datapath + state.dataset + '-train-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         traino = traino[-state.Nrel:, :]
