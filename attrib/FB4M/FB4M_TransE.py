@@ -13,7 +13,7 @@ launch(
     lrparam=1. / 4000,
     nbatches=100,
     totepochs=1000,
-    test_all=10,
+    test_all=1,
     neval=1000,
     savepath='FB4M_TransE',
     datapath='../data/',
