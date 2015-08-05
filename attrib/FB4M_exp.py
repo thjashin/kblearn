@@ -10,7 +10,7 @@ from scipy import sparse as sp
 import scipy
 
 from model import *
-from semantic import build_model
+from semantic import build_model, SemanticFunc
 
 
 # Utils ----------------------------------------------------------------------
@@ -206,6 +206,7 @@ def FB4Mexp(state, channel):
     sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
                               rightop, margin=state.margin, rel=False)
+    sem_func = SemanticFunc(sem_model)
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
                                          rightop, subtensorspec=state.Nsyn)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
@@ -271,13 +272,11 @@ def FB4Mexp(state, channel):
             entity_embeddings = []
             for i in xrange(n_entity_batches):
                 entity_embeddings.append(
-                    sem_model.get_output(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray(),
-                                         deterministic=True)
+                    sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
                 )
             if n_entity_batches * entity_batchsize < state.Nsyn:
                 entity_embeddings.append(
-                    sem_model.get_output(entity_ngrams[n_entity_batches * entity_batchsize:].toarray(),
-                                         deterministic=True)
+                    sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
                 )
             entity_embeddings = np.vstack(entity_embeddings)
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,

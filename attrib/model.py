@@ -578,13 +578,13 @@ def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     idxo = T.iscalar('idxo')
 
     # Graph
-    lhs = lhs.reshape((1, embedding.D))
+    lhs_ = lhs.reshape((1, embedding.D))
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
         rhs = rhs[:subtensorspec]
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
-    tmp = leftop(lhs, rell)
+    tmp = leftop(lhs_, rell)
     simi = fnsim(tmp.reshape((1, tmp.shape[1])), rightop(rhs, relr))
     """
     Theano function inputs.
@@ -625,10 +625,10 @@ def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     if subtensorspec is not None:
         # We compute the score only for a subset of entities
         lhs = lhs[:subtensorspec]
-    rhs = rhs.reshape((1, embedding.D))
+    rhs_ = rhs.reshape((1, embedding.D))
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
-    tmp = rightop(rhs, relr)
+    tmp = rightop(rhs_, relr)
     simi = fnsim(leftop(lhs, rell), tmp.reshape((1, tmp.shape[1])))
     """
     Theano function inputs.
@@ -645,7 +645,7 @@ def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
 
 def RankFnIdx(fnbatch, embeddings, sing_item, idxo, batchsize):
     M, N = embeddings.shape
-    nbatches = np.ceil(M * 1.0 / batchsize)
+    nbatches = int(np.ceil(M * 1.0 / batchsize))
     simis = []
     for i in xrange(nbatches):
         sem_batch = embeddings[i * batchsize:(i + 1) * batchsize]
