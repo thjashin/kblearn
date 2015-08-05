@@ -654,7 +654,6 @@ def RankFnIdx(fnbatch, embeddings, sing_item, idxo, batchsize):
 
 
 def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
-    embedding, relationl, relationr = parse_embeddings(embeddings)
     """
     This function returns a Theano function to measure the similarity score of
     all relation entities given couples of 'left' and 'right' entities (as

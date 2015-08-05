@@ -94,6 +94,8 @@ class DD(dict):
 
 # Experiment function --------------------------------------------------------
 def FB4Mexp(state, channel):
+    db_train_size = 40000
+
     # Show experiment parameters
     print >> sys.stderr, state
     np.random.seed(state.seed)
@@ -113,8 +115,8 @@ def FB4Mexp(state, channel):
     print 'entity_ngrams.shape:', entity_ngrams.shape
 
     # Positives
-    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
-    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :]
+    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :][:db_train_size, :]
+    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :][:db_train_size, :]
     traino = load_file(state.datapath + state.dataset + '-train-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         traino = traino[-state.Nrel:, :]
@@ -239,7 +241,7 @@ def FB4Mexp(state, channel):
 
             # training iteration
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
-                               state.lrparam / float(batchsize),
+                               state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
             out += [outtmp[0] / float(batchsize)]
             outb += [outtmp[1]]
@@ -325,7 +327,7 @@ def FB4Mexp(state, channel):
 def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
            Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
-           lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
+           lremb=0.1, lrparam=1., nbatches=100, totepochs=2000, test_all=1, neval=50,
            seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
     # Argument of the experiment script
     state = DD()
