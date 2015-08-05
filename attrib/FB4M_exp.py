@@ -203,7 +203,7 @@ def FB4Mexp(state, channel):
     # Function compilation
     sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
-                              rightop, margin=state.marge, rel=False)
+                              rightop, margin=state.margin, rel=False)
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
                                          rightop, subtensorspec=state.Nsyn)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
