@@ -271,12 +271,12 @@ def FB4Mexp(state, channel):
             entity_embeddings = []
             for i in xrange(n_entity_batches):
                 entity_embeddings.append(
-                    sem_model.get_output(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize],
+                    sem_model.get_output(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray(),
                                          deterministic=True)
                 )
             if n_entity_batches * entity_batchsize < state.Nsyn:
                 entity_embeddings.append(
-                    sem_model.get_output(entity_ngrams[n_entity_batches * entity_batchsize:],
+                    sem_model.get_output(entity_ngrams[n_entity_batches * entity_batchsize:].toarray(),
                                          deterministic=True)
                 )
             entity_embeddings = np.vstack(entity_embeddings)
