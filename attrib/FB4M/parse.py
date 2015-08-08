@@ -22,7 +22,7 @@ def load_sparse_csr(filename):
 
 # Put the freebase4M data absolute path here
 datapath = '/mfs/jiaxin/data/freebase-has-desc/'
-rand_split_path = os.path.join(datapath, 'rand-split') + '/'
+rand_split_path = os.path.join(datapath, 'entity-split') + '/'
 
 assert datapath is not None
 
