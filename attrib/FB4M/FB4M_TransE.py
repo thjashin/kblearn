@@ -11,7 +11,7 @@ launch(
     momentum=0.9,
     lremb=0.01,
     lrparam=1. / 4000,
-    nbatches=100,
+    nbatches=1000,
     totepochs=1000,
     test_all=1,
     neval=1000,

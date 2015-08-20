@@ -1,10 +1,24 @@
 #! /usr/bin/python
 import sys
+import cPickle
+
+import scipy
+
+from scipy import sparse as sp
+
 from model import *
+from semantic import SemanticFunc
+
 
 def load_file(path):
     return scipy.sparse.csr_matrix(cPickle.load(open(path)),
-            dtype=theano.config.floatX)
+                                   dtype=theano.config.floatX)
+
+
+def load_sparse_csr(filename):
+    loader = np.load(filename)
+    return sp.csr_matrix((loader['data'], loader['indices'], loader['indptr']),
+                         shape=loader['shape'])
 
 
 def convert2idx(spmat):
@@ -12,22 +26,27 @@ def convert2idx(spmat):
     return rows[np.argsort(cols)]
 
 
-def RankingEval(datapath='../data/', dataset='FB15k-test',
-        loadmodel='best_valid_model.pkl', neval='all', Nsyn=14951, n=10,
-        idx2synsetfile='FB15k_idx2entity.pkl'):
-
+def RankingEval(datapath='../data/', dataset='FB4M',
+                loadmodel='best_valid_model.pkl', neval='all', Nsyn=4661857, n=10,
+                idx2synsetfile='FB4M_idx2entity.pkl', entity_batchsize=40000, eval_batchsize=40000):
     # Load model
     f = open(loadmodel)
+    sem_model = cPickle.load(f)
     embeddings = cPickle.load(f)
     leftop = cPickle.load(f)
     rightop = cPickle.load(f)
     simfn = cPickle.load(f)
     f.close()
 
+    # load ngram features of entities
+    entity_ngrams = load_sparse_csr(datapath + dataset +
+                                    '-bag-of-3grams.npz').astype(theano.config.floatX)
+    print 'entity_ngrams.shape:', entity_ngrams.shape
+
     # Load data
-    l = load_file(datapath + dataset + '-lhs.pkl')
-    r = load_file(datapath + dataset + '-rhs.pkl')
-    o = load_file(datapath + dataset + '-rel.pkl')
+    l = load_file(datapath + dataset + '-test-lhs.pkl')
+    r = load_file(datapath + dataset + '-test-rhs.pkl')
+    o = load_file(datapath + dataset + '-test-rel.pkl')
     if type(embeddings) is list:
         o = o[-embeddings[1].N:, :]
 
@@ -41,12 +60,29 @@ def RankingEval(datapath='../data/', dataset='FB15k-test',
         idxr = convert2idx(r)[:neval]
         idxo = convert2idx(o)[:neval]
 
-    ranklfunc = RankLeftFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=Nsyn)
-    rankrfunc = RankRightFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=Nsyn)
+    sem_func = SemanticFunc(sem_model)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop,
+                                         subtensorspec=Nsyn)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop,
+                                          subtensorspec=Nsyn)
 
-    res = RankingScoreIdx(ranklfunc, rankrfunc, idxl, idxr, idxo)
+    # get sem output for all entities
+    n_entity_batches = Nsyn / entity_batchsize
+
+    entity_embeddings = []
+    for i in xrange(n_entity_batches):
+        entity_embeddings.append(
+            sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
+        )
+    if n_entity_batches * entity_batchsize < Nsyn:
+        entity_embeddings.append(
+            sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
+        )
+    entity_embeddings = np.vstack(entity_embeddings)
+    res = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                              entity_embeddings, idxl, idxr,
+                              idxo, eval_batchsize)
+
     dres = {}
     dres.update({'microlmean': np.mean(res[0])})
     dres.update({'microlmedian': np.median(res[0])})
@@ -61,14 +97,14 @@ def RankingEval(datapath='../data/', dataset='FB15k-test',
 
     print "### MICRO:"
     print "\t-- left   >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['microlmean'], 5), round(dres['microlmedian'], 5),
-            n, round(dres['microlhits@n'], 3))
+        round(dres['microlmean'], 5), round(dres['microlmedian'], 5),
+        n, round(dres['microlhits@n'], 3))
     print "\t-- right  >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['micrormean'], 5), round(dres['micrormedian'], 5),
-            n, round(dres['microrhits@n'], 3))
+        round(dres['micrormean'], 5), round(dres['micrormedian'], 5),
+        n, round(dres['microrhits@n'], 3))
     print "\t-- global >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['microgmean'], 5), round(dres['microgmedian'], 5),
-            n, round(dres['microghits@n'], 3))
+        round(dres['microgmean'], 5), round(dres['microgmedian'], 5),
+        n, round(dres['microghits@n'], 3))
 
     listrel = set(idxo)
     dictrelres = {}
@@ -126,14 +162,14 @@ def RankingEval(datapath='../data/', dataset='FB15k-test',
 
     print "### MACRO:"
     print "\t-- left   >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['macrolmean'], 5), round(dres['macrolmedian'], 5),
-            n, round(dres['macrolhits@n'], 3))
+        round(dres['macrolmean'], 5), round(dres['macrolmedian'], 5),
+        n, round(dres['macrolhits@n'], 3))
     print "\t-- right  >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['macrormean'], 5), round(dres['macrormedian'], 5),
-            n, round(dres['macrorhits@n'], 3))
+        round(dres['macrormean'], 5), round(dres['macrormedian'], 5),
+        n, round(dres['macrorhits@n'], 3))
     print "\t-- global >> mean: %s, median: %s, hits@%s: %s%%" % (
-            round(dres['macrogmean'], 5), round(dres['macrogmedian'], 5),
-            n, round(dres['macroghits@n'], 3))
+        round(dres['macrogmean'], 5), round(dres['macrogmedian'], 5),
+        n, round(dres['macroghits@n'], 3))
 
     return dres
 

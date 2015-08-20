@@ -115,8 +115,8 @@ def FB4Mexp(state, channel):
     print 'entity_ngrams.shape:', entity_ngrams.shape
 
     # Positives
-    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :][:, :db_train_size]
-    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :][:, :db_train_size]
+    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
+    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :]
     traino = load_file(state.datapath + state.dataset + '-train-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         traino = traino[-state.Nrel:, :]
@@ -150,9 +150,9 @@ def FB4Mexp(state, channel):
     trainlidx = trainlidx[:state.neval]
     trainridx = convert2idx(trainr)[:state.neval]
     trainoidx = convert2idx(traino)[:state.neval]
-    validlidx = convert2idx(validl)[:state.neval]
-    validridx = convert2idx(validr)[:state.neval]
-    validoidx = convert2idx(valido)[:state.neval]
+    validlidx = convert2idx(validl)[state.neval:2 * state.neval]
+    validridx = convert2idx(validr)[state.neval:2 * state.neval]
+    validoidx = convert2idx(valido)[state.neval:2 * state.neval]
     testlidx = convert2idx(testl)[:state.neval]
     testridx = convert2idx(testr)[:state.neval]
     testoidx = convert2idx(testo)[:state.neval]
@@ -326,7 +326,7 @@ def FB4Mexp(state, channel):
 def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
            Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
-           lremb=0.1, lrparam=1., nbatches=100, totepochs=2000, test_all=1, neval=50,
+           lremb=0.1, lrparam=1., nbatches=1000, totepochs=2000, test_all=1, neval=50,
            seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
     # Argument of the experiment script
     state = DD()
