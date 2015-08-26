@@ -17,6 +17,6 @@ launch(
     neval=1000,
     savepath='FB4M_TransE',
     datapath='../data/',
-    eval_batchsize=40000,
-    entity_batchsize=40000
+    eval_batchsize=5120000,
+    entity_batchsize=80000
 )

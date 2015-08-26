@@ -24,8 +24,8 @@ def Dotsim(left, right):
 
 
 # Cost ------------------------------------------------------------------------
-def margincost(pos, neg, marge=1.0):
-    out = neg - pos + marge
+def margincost(pos, neg, margin=1.0):
+    out = neg - pos + margin
     return T.sum(out * (out > 0)), out > 0
 # -----------------------------------------------------------------------------
 
@@ -717,7 +717,7 @@ def FastRankingScoreIdx(sl_batch, sr_batch, embeddings, idxl, idxr, idxo, batchs
     return errl, errr
 
 
-def Fn(fnsim, embeddings, leftop, rightop, marge=1.0):
+def Fn(fnsim, embeddings, leftop, rightop, margin=1.0):
     """
     This function returns a theano function to perform a training iteration,
     contrasting couples of positive and negative triplets. members are given
@@ -728,7 +728,7 @@ def Fn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: margin For the cost function.
+    :param margin: margin For the cost function.
     """
     embedding, relationl, relationr = parse_embeddings(embeddings)
     # Inputs
@@ -755,7 +755,7 @@ def Fn(fnsim, embeddings, leftop, rightop, marge=1.0):
     relrn = S.dot(relationr.E, inpon).T
     simin = fnsim(leftop(lhsn, relln), rightop(rhsn, relrn))
 
-    cost, out = margincost(simi, simin, marge)
+    cost, out = margincost(simi, simin, margin)
     # Parameters gradients
     if hasattr(fnsim, 'params'):
         # If the similarity function has some parameters, we update them too.
@@ -807,7 +807,7 @@ def Fn(fnsim, embeddings, leftop, rightop, marge=1.0):
                            on_unused_input='ignore')
 
 
-def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
+def ForwardFn(fnsim, embeddings, leftop, rightop, margin=1.0):
     """
     This function returns a theano function to perform a forward step,
     contrasting couples of positive and negative triplets. members are given
@@ -818,7 +818,7 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: margin for the cost function.
+    :param margin: margin for the cost function.
 
     :note: this is useful for W_SABIE [Weston et al., IJCAI 2011]
     """
@@ -843,7 +843,7 @@ def ForwardFn(fnsim, embeddings, leftop, rightop, marge=1.0):
     relrn = S.dot(relationr.E, inpon).T
     simi = fnsim(leftop(lhs, rell), rightop(rhs, relr))
     simin = fnsim(leftop(lhsn, relln), rightop(rhsn, relrn))
-    cost, out = margincost(simi, simin, marge)
+    cost, out = margincost(simi, simin, margin)
     """
     Theano function inputs.
     :input inpl: sparse csr matrix representing the indexes of the positive
@@ -973,7 +973,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
                            updates=updates, on_unused_input='ignore')
 
 
-def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
+def TrainFn1Member(fnsim, embeddings, leftop, rightop, margin=1.0, rel=True):
     """
     This function returns a theano function to perform a training iteration,
     contrasting positive and negative triplets. members are given as sparse
@@ -985,7 +985,7 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: margin for the cost function.
+    :param margin: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
     """
@@ -1012,8 +1012,8 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     similn = fnsim(leftop(lhsn, rell), rightop(rhs, relr))
     # Negative 'right' member
     simirn = fnsim(leftop(lhs, rell), rightop(rhsn, relr))
-    costl, outl = margincost(simi, similn, marge)
-    costr, outr = margincost(simi, simirn, marge)
+    costl, outl = margincost(simi, similn, margin)
+    costr, outr = margincost(simi, simirn, margin)
     cost = costl + costr
     out = T.concatenate([outl, outr])
     # List of inputs of the function
@@ -1025,7 +1025,7 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
         relln = S.dot(relationl.E, inpon).T
         relrn = S.dot(relationr.E, inpon).T
         simion = fnsim(leftop(lhs, relln), rightop(rhs, relrn))
-        costo, outo = margincost(simi, simion, marge)
+        costo, outo = margincost(simi, simion, margin)
         cost += costo
         out = T.concatenate([out, outo])
         list_in += [inpon]
@@ -1078,7 +1078,7 @@ def TrainFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
             updates=updates, on_unused_input='ignore')
 
 
-def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
+def ForwardFn1Member(fnsim, embeddings, leftop, rightop, margin=1.0, rel=True):
     """
     This function returns a theano function to perform a forward step,
     contrasting positive and negative triplets. members are given as sparse
@@ -1090,7 +1090,7 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     :param embeddings: an embeddings instance.
     :param leftop: class for the 'left' operator.
     :param rightop: class for the 'right' operator.
-    :param marge: margin for the cost function.
+    :param margin: margin for the cost function.
     :param rel: boolean, if true we also contrast w.r.t. a negative relation
                 member.
 
@@ -1115,8 +1115,8 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
     simi = fnsim(leftop(lhs, rell), rightop(rhs, relr))
     similn = fnsim(leftop(lhsn, rell), rightop(rhs, relr))
     simirn = fnsim(leftop(lhs, rell), rightop(rhsn, relr))
-    costl, outl = margincost(simi, similn, marge)
-    costr, outr = margincost(simi, simirn, marge)
+    costl, outl = margincost(simi, similn, margin)
+    costr, outr = margincost(simi, simirn, margin)
     list_in = [inpl, inpr, inpo, inpln]
     list_out = [outl, outr]
     if rel:
@@ -1124,7 +1124,7 @@ def ForwardFn1Member(fnsim, embeddings, leftop, rightop, marge=1.0, rel=True):
         relln = S.dot(relationl.E, inpon).T
         relrn = S.dot(relationr.E, inpon).T
         simion = fnsim(leftop(lhs, relln), rightop(rhs, relrn))
-        costo, outo = margincost(simi, simion, marge)
+        costo, outo = margincost(simi, simion, margin)
         out = T.concatenate([outl, outr, outo])
         list_in += [inpon]
         list_out += [outo]

@@ -3,11 +3,11 @@ import sys
 import cPickle
 
 import scipy
-
 from scipy import sparse as sp
+import numpy as np
+import theano
 
 from model import *
-from semantic import SemanticFunc
 
 
 def load_file(path):
@@ -27,16 +27,20 @@ def convert2idx(spmat):
 
 
 def RankingEval(datapath='../data/', dataset='FB4M',
-                loadmodel='best_valid_model.pkl', neval='all', Nsyn=4661857, n=10,
-                idx2synsetfile='FB4M_idx2entity.pkl', entity_batchsize=40000, eval_batchsize=40000):
+                loadmodel='best_valid_model.pkl', neval=80000, Nsyn=4661857, n=10,
+                entity_batchsize=80000, eval_batchsize=5120000):
     # Load model
-    f = open(loadmodel)
+    f = open(loadmodel + '.ents')
     sem_model = cPickle.load(f)
     embeddings = cPickle.load(f)
+    entity_embeddings = cPickle.load(f)
     leftop = cPickle.load(f)
     rightop = cPickle.load(f)
     simfn = cPickle.load(f)
     f.close()
+
+    with open(datapath + dataset + '_idx2entity.pkl', 'r') as f:
+        idx2entity = cPickle.load(f)
 
     # load ngram features of entities
     entity_ngrams = load_sparse_csr(datapath + dataset +
@@ -60,25 +64,25 @@ def RankingEval(datapath='../data/', dataset='FB4M',
         idxr = convert2idx(r)[:neval]
         idxo = convert2idx(o)[:neval]
 
-    sem_func = SemanticFunc(sem_model)
+    # sem_func = SemanticFunc(sem_model)
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop,
                                          subtensorspec=Nsyn)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop,
                                           subtensorspec=Nsyn)
 
     # get sem output for all entities
-    n_entity_batches = Nsyn / entity_batchsize
-
-    entity_embeddings = []
-    for i in xrange(n_entity_batches):
-        entity_embeddings.append(
-            sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
-        )
-    if n_entity_batches * entity_batchsize < Nsyn:
-        entity_embeddings.append(
-            sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
-        )
-    entity_embeddings = np.vstack(entity_embeddings)
+    # n_entity_batches = Nsyn / entity_batchsize
+    #
+    # entity_embeddings = []
+    # for i in xrange(n_entity_batches):
+    #     entity_embeddings.append(
+    #         sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
+    #     )
+    # if n_entity_batches * entity_batchsize < Nsyn:
+    #     entity_embeddings.append(
+    #         sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
+    #     )
+    # entity_embeddings = np.vstack(entity_embeddings)
     res = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
                               entity_embeddings, idxl, idxr,
                               idxo, eval_batchsize)
@@ -105,6 +109,15 @@ def RankingEval(datapath='../data/', dataset='FB4M',
     print "\t-- global >> mean: %s, median: %s, hits@%s: %s%%" % (
         round(dres['microgmean'], 5), round(dres['microgmedian'], 5),
         n, round(dres['microghits@n'], 3))
+
+    # write good candidates to file
+    with open('hitat10.tsv', 'w') as f:
+        for i in xrange(len(res[1])):
+            if res[1][i] < 10:
+                f.write('%d\t%s\t%s\t%s\n' % (
+                    res[1][i], idx2entity[idxl[i]],
+                    idx2entity[Nsyn + idxo[i]], idx2entity[idxr[i]]))
+
 
     listrel = set(idxo)
     dictrelres = {}

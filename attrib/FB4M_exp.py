@@ -311,6 +311,7 @@ def FB4Mexp(state, channel):
             f = open(state.savepath + '/current_model.pkl', 'w')
             cPickle.dump(sem_model, f, -1)
             cPickle.dump(embeddings, f, -1)
+            cPickle.dump(entity_embeddings, f, -1)
             cPickle.dump(leftop, f, -1)
             cPickle.dump(rightop, f, -1)
             cPickle.dump(simfn, f, -1)
