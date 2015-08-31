@@ -1,10 +1,17 @@
-#! /usr/bin/env python
+#! /usr/bin/python
 # -*- coding: utf-8 -*-
 
 import cPickle
+import os
+import sys
+import time
+
+from scipy import sparse as sp
+import scipy
 
 from model import *
-from semantic import build_model
+from semantic import build_model, SemanticFunc
+import gensim
 
 
 # Utils ----------------------------------------------------------------------
@@ -36,6 +43,17 @@ def create_random_mat(shape, listidx=None):
 def load_file(path):
     return scipy.sparse.csr_matrix(cPickle.load(open(path)),
                                    dtype=theano.config.floatX)
+
+
+def save_sparse_csr(filename, array):
+    np.savez_compressed(filename, data=array.data, indices=array.indices,
+                        indptr=array.indptr, shape=array.shape)
+
+
+def load_sparse_csr(filename):
+    loader = np.load(filename)
+    return sp.csr_matrix((loader['data'], loader['indices'], loader['indptr']),
+                         shape=loader['shape'])
 
 
 def convert2idx(spmat):
@@ -74,13 +92,11 @@ class DD(dict):
 
 # ----------------------------------------------------------------------------
 
-def toidx(input_, n_eval):
-    idxs = convert2idx(input_)
-    return idxs, idxs[:n_eval]
-
 
 # Experiment function --------------------------------------------------------
 def FB4Mexp(state, channel):
+    db_train_size = 40000
+
     # Show experiment parameters
     print >> sys.stderr, state
     np.random.seed(state.seed)
@@ -94,54 +110,66 @@ def FB4Mexp(state, channel):
         if not os.path.isdir(state.savepath):
             os.mkdir(state.savepath)
 
-    # load concatenate word vector features of entities
-    entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
-                        'entity_inputs'].astype(theano.config.floatX) * 200
-    # entity_inputs = load_file(state.datapath + state.dataset + '-bag-of-3grams.pkl').astype(theano.config.floatX).toarray()
-    M, N = entity_inputs.shape
-    entity_inputs = entity_inputs.reshape((M, 1, 1, N))
-    entity_inputs_shared = shared_sem_inputs(entity_inputs)
-    print 'entity_inputs.shape:', entity_inputs.shape
+    # load word2id
+    with open(state.datapath + state.dataset + '_id2word.pkl', 'r') as f:
+        id2word = cPickle.load(f)
+
+    # load concatenate words
+    print 'loading concatenate words'
+    with open(state.datapath + state.dataset + '_concat-words.txt', 'r') as f:
+        entity_words = [map(int, line.split(' ')) for line in f]
+
+    # load word2vec
+    print 'loading word2vec...'
+    wordvec = gensim.models.Word2Vec.load_word2vec_format(
+        'GoogleNews-vectors-negative300.bin.gz', binary=True)
 
     # Positives
-    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')
-    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')
+    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
+    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :]
     traino = load_file(state.datapath + state.dataset + '-train-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         traino = traino[-state.Nrel:, :]
 
     # Valid set
-    validl = load_file(state.datapath + state.dataset + '-valid-lhs.pkl')
-    validr = load_file(state.datapath + state.dataset + '-valid-rhs.pkl')
+    validl = load_file(state.datapath + state.dataset + '-valid-lhs.pkl')[:state.Nsyn, :]
+    validr = load_file(state.datapath + state.dataset + '-valid-rhs.pkl')[:state.Nsyn, :]
     valido = load_file(state.datapath + state.dataset + '-valid-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         valido = valido[-state.Nrel:, :]
 
     # Test set
-    testl = load_file(state.datapath + state.dataset + '-test-lhs.pkl')
-    testr = load_file(state.datapath + state.dataset + '-test-rhs.pkl')
+    testl = load_file(state.datapath + state.dataset + '-test-lhs.pkl')[:state.Nsyn, :]
+    testr = load_file(state.datapath + state.dataset + '-test-rhs.pkl')[:state.Nsyn, :]
     testo = load_file(state.datapath + state.dataset + '-test-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         testo = testo[-state.Nrel:, :]
 
     batchsize = trainl.shape[1] / state.nbatches
+    eval_batchsize = state.eval_batchsize
+    entity_batchsize = state.entity_batchsize
+    n_entity_batches = state.Nsyn / entity_batchsize
 
     print 'trainl.shape:', trainl.shape
     print 'trainr.shape:', trainr.shape
     print 'traino.shape:', traino.shape
 
     # Index conversion
-    trainlidx, trainlidx_eval = toidx(trainl, state.neval)
+    trainlidx = convert2idx(trainl)
     print 'trainlidx.shape:', trainlidx.shape
-    print 'trainlidx_eval.shape:', trainlidx_eval.shape
-    trainridx, trainridx_eval = toidx(trainr, state.neval)
-    trainoidx, trainoidx_eval = toidx(traino, state.neval)
-    validlidx, validlidx_eval = toidx(validl, state.neval)
-    validridx, validridx_eval = toidx(validr, state.neval)
-    validoidx, validoidx_eval = toidx(valido, state.neval)
-    testlidx, testlidx_eval = toidx(testl, state.neval)
-    testridx, testridx_eval = toidx(testr, state.neval)
-    testoidx, testoidx_eval = toidx(testo, state.neval)
+    trainlidx = trainlidx[:state.neval]
+    trainridx = convert2idx(trainr)[:state.neval]
+    trainoidx = convert2idx(traino)[:state.neval]
+    validlidx = convert2idx(validl)[state.neval:2 * state.neval]
+    validridx = convert2idx(validr)[state.neval:2 * state.neval]
+    validoidx = convert2idx(valido)[state.neval:2 * state.neval]
+    testlidx = convert2idx(testl)[:state.neval]
+    testridx = convert2idx(testr)[:state.neval]
+    testoidx = convert2idx(testo)[:state.neval]
+
+    print 'trainlidx.shape:', trainlidx.shape
+    print 'trainridx.shape:', trainridx.shape
+    print 'trainoidx.shape:', trainoidx.shape
 
     # Model declaration
     if not state.loadmodel:
@@ -185,26 +213,18 @@ def FB4Mexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_inputs.shape[3], state.ndim, batch_size=batchsize)
-    # sem_model = build_model(entity_inputs.shape[1], state.ndim, batch_size=None)
+    sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
-                              rightop, marge=state.marge, rel=False)
-    ranklfunc = RankLeftFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-                              rightop, subtensorspec=state.Nsyn)
-    rankrfunc = RankRightFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-                               rightop, subtensorspec=state.Nsyn)
-
-    valid_sem_inputl = entity_inputs[validlidx_eval]
-    valid_sem_inputr = entity_inputs[validridx_eval]
-    train_sem_inputl = entity_inputs[trainlidx_eval]
-    train_sem_inputr = entity_inputs[trainridx_eval]
-    test_sem_inputl = entity_inputs[testlidx_eval]
-    test_sem_inputr = entity_inputs[testridx_eval]
+                              rightop, margin=state.margin, rel=False)
+    sem_func = SemanticFunc(sem_model)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
+                                         rightop, subtensorspec=state.Nsyn)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
+                                          rightop, subtensorspec=state.Nsyn)
 
     out = []
     outb = []
     state.bestvalid = -1
-    relation_update_ratio = []
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
@@ -214,67 +234,37 @@ def FB4Mexp(state, channel):
         trainl = trainl[:, order]
         trainr = trainr[:, order]
         traino = traino[:, order]
-        trainlidx = trainlidx[order]
-        trainridx = trainridx[order]
-        trainoidx = trainoidx[order]
 
         # Negatives
         trainln = create_random_mat(trainl.shape, np.arange(state.Nsyn))
         trainrn = create_random_mat(trainr.shape, np.arange(state.Nsyn))
-        trainlnidx = convert2idx(trainln)
-        trainrnidx = convert2idx(trainrn)
-
-        lhs_norms = []
 
         for i in range(state.nbatches):
-            # tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
-            # tmpr = trainr[:, i * batchsize:(i + 1) * batchsize]
+            tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
+            tmpr = trainr[:, i * batchsize:(i + 1) * batchsize]
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
-            # tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
-            # tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
-            # sem_inputl = entity_inputs.T.dot(tmpl.toarray()).T
-            # sem_inputr = entity_inputs.T.dot(tmpr.toarray()).T
-            # sem_inputnl = entity_inputs.T.dot(tmpnl.toarray()).T
-            # sem_inputnr = entity_inputs.T.dot(tmpnr.toarray()).T
-
-            tmpl_idx = trainlidx[i * batchsize:(i + 1) * batchsize]
-            tmpr_idx = trainridx[i * batchsize:(i + 1) * batchsize]
-            tmpnl_idx = trainlnidx[i * batchsize:(i + 1) * batchsize]
-            tmpnr_idx = trainrnidx[i * batchsize:(i + 1) * batchsize]
-            sem_inputl = entity_inputs[tmpl_idx]
-            sem_inputr = entity_inputs[tmpr_idx]
-            sem_inputnl = entity_inputs[tmpnl_idx]
-            sem_inputnr = entity_inputs[tmpnr_idx]
-            # print 'sem_inputl.shape:', sem_inputl.shape
+            tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
+            tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
+            sem_inputl = entity_ngrams.T.dot(tmpl).T.toarray()
+            sem_inputr = entity_ngrams.T.dot(tmpr).T.toarray()
+            sem_inputnl = entity_ngrams.T.dot(tmpnl).T.toarray()
+            sem_inputnr = entity_ngrams.T.dot(tmpnr).T.toarray()
 
             # training iteration
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            # [cost, lhs, rhs, lhsn, rhsn, rell, relr, relation_updates] = outtmp[2:]
-            # lhs_emb = outtmp[2]
-            # relation_updates = np.array(outtmp[2])
-            # relation_update_ratio.append(np.linalg.norm(relation_updates) / np.linalg.norm(embeddings[1].E.get_value()))
-            lhs = outtmp[2]
-            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
-            lhs_norms.append(lhs_norm)
-            out.append(outtmp[0] / float(batchsize))
-            outb.append(outtmp[1])
+            out += [outtmp[0] / float(batchsize)]
+            outb += [outtmp[1]]
+            # print 'relation updates:', outtmp[2]
             # embeddings normalization
             # if type(embeddings) is list:
             #     embeddings[0].normalize()
             # else:
             #     embeddings.normalize()
-            if i > 0 and i % state.printbatches == 0:
-                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
-                    epoch_count, i, out[-1])
-                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
-                lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))
-        # print >> sys.stderr, 'relation update ratio: %f' % np.mean(relation_update_ratio)
-        # relation_update_ratio = []
 
         if (epoch_count % state.test_all) == 0:
             # model evaluation
@@ -287,20 +277,32 @@ def FB4Mexp(state, channel):
                 round(np.mean(outb) * 100, 3))
             out = []
             outb = []
-            resvalid = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                                           validlidx_eval, valid_sem_inputl, validridx_eval, valid_sem_inputr,
-                                           validoidx_eval)
+
+            # get sem output for all entities
+            entity_embeddings = []
+            for i in xrange(n_entity_batches):
+                entity_embeddings.append(
+                    sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
+                )
+            if n_entity_batches * entity_batchsize < state.Nsyn:
+                entity_embeddings.append(
+                    sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
+                )
+            entity_embeddings = np.vstack(entity_embeddings)
+            resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                           entity_embeddings, validlidx, validridx,
+                                           validoidx, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
-            restrain = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                                           trainlidx_eval, train_sem_inputl, trainridx_eval, train_sem_inputr,
-                                           trainoidx_eval)
+            restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                           entity_embeddings, trainlidx, trainridx,
+                                           trainoidx, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                 state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
-                restest = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                                              testlidx_eval, test_sem_inputl, testridx_eval, test_sem_inputr,
-                                              testoidx_eval)
+                restest = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                              entity_embeddings, testlidx, testridx,
+                                              testoidx, eval_batchsize)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
@@ -309,6 +311,7 @@ def FB4Mexp(state, channel):
                 f = open(state.savepath + '/best_valid_model.pkl', 'w')
                 cPickle.dump(sem_model, f, -1)
                 cPickle.dump(embeddings, f, -1)
+                cPickle.dump(entity_embeddings, f, -1)
                 cPickle.dump(leftop, f, -1)
                 cPickle.dump(rightop, f, -1)
                 cPickle.dump(simfn, f, -1)
@@ -319,6 +322,7 @@ def FB4Mexp(state, channel):
             f = open(state.savepath + '/current_model.pkl', 'w')
             cPickle.dump(sem_model, f, -1)
             cPickle.dump(embeddings, f, -1)
+            cPickle.dump(entity_embeddings, f, -1)
             cPickle.dump(leftop, f, -1)
             cPickle.dump(rightop, f, -1)
             cPickle.dump(simfn, f, -1)
@@ -331,11 +335,11 @@ def FB4Mexp(state, channel):
     return channel.COMPLETE
 
 
-def launch(datapath='data/', dataset='FB4M', Nent=16296,
-           Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
+def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
+           Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
-           lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
-           seed=123, savepath='.', printbatches=1):
+           lremb=0.1, lrparam=1., nbatches=1000, totepochs=2000, test_all=1, neval=50,
+           seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
     # Argument of the experiment script
     state = DD()
 
@@ -350,18 +354,19 @@ def launch(datapath='data/', dataset='FB4M', Nent=16296,
     state.simfn = simfn
     state.ndim = ndim
     state.nhid = nhid
-    state.marge = margin
+    state.margin = margin
     state.lrweights = lrweights
     state.momentum = momentum
     state.lremb = lremb
     state.lrparam = lrparam
     state.nbatches = nbatches
-    state.printbatches = printbatches
     state.totepochs = totepochs
     state.test_all = test_all
     state.neval = neval
     state.seed = seed
     state.savepath = savepath
+    state.eval_batchsize = eval_batchsize
+    state.entity_batchsize = entity_batchsize
 
     if not os.path.isdir(state.savepath):
         os.mkdir(state.savepath)

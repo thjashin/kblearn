@@ -6,8 +6,6 @@ import scipy.sparse as sp
 
 import numpy as np
 from nltk.tokenize import word_tokenize
-import word2vec
-
 
 
 # Put the FB4M data absolute path here
@@ -56,6 +54,8 @@ for item in items:
     mid = item['mid']
     desc = item['description']
 
+    if mid in entity2idx:
+        continue
     idx = entity2idx.setdefault(mid, len(entity2idx))
     idx2entity.setdefault(idx, mid)
 
@@ -64,14 +64,19 @@ for item in items:
 
     # discuss: whether to deal with stopwords
     words = word_tokenize(desc.lower())
+    wids = []
     # words = filter(lambda x: x not in punctuations, words)
     # words = filter(lambda x: x not in stopwords_, words)
     for word in set(words):
         id_ = word2id.setdefault(word, len(word2id))
         id2word.setdefault(id_, word)
+        wids.append(id_)
 
     lens.append(len(words))
-    items_seg.append((mid, words))
+    items_seg.append(wids)
+
+print 'len(items_seg):', len(items_seg)
+print 'len(entity2idx):', len(entity2idx)
 
 del items
 del text
@@ -85,37 +90,41 @@ with open('../data/FB4M_word2id.pkl', 'w') as f:
 with open('../data/FB4M_id2word.pkl', 'w') as f:
     cPickle.dump(id2word, f, -1)
 
+with open('../data/FB4M_concat-words.txt', 'w') as f:
+    f.write('\n'.join([' '.join(map(str, i)) for i in items_seg]))
+print 'write FB4M_concat-words finished.'
+
 ###########################################################
 ### Creation of concatenate word vector feature for text
 
-WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
-wordvec = word2vec.load(WORD_VEC_FILE)
-vectors = wordvec.vectors
-vocab = wordvec.vocab
-word2idx = {}
-for i, w in enumerate(vocab):
-    word2idx[w] = i
-
-word_vec_dims = vectors[word2idx['king']].shape[0]
-print 'word_vec_dims:', word_vec_dims
+# WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
+# wordvec = word2vec.load(WORD_VEC_FILE)
+# vectors = wordvec.vectors
+# vocab = wordvec.vocab
+# word2idx = {}
+# for i, w in enumerate(vocab):
+#     word2idx[w] = i
+#
+# word_vec_dims = vectors[word2idx['king']].shape[0]
+# print 'word_vec_dims:', word_vec_dims
 
 # Check coverage of word vectors on vocabulary
-total = len(word2id)
-cnt = 0
-miss = []
-for word in word2id:
-    if word in word2idx:
-        cnt += 1
-    else:
-        miss.append(word)
-print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
-                                                       total - cnt, total)
+# total = len(word2id)
+# cnt = 0
+# miss = []
+# for word in word2id:
+#     if word in word2idx:
+#         cnt += 1
+#     else:
+#         miss.append(word)
+# print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
+#                                                        total - cnt, total)
 
 # Check max/min length of input text
 print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
     min(lens), max(lens), np.mean(lens), np.median(lens))
 
-limit_len = 240
+limit_len = 50
 max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
@@ -124,20 +133,20 @@ print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 #     for word in miss:
 #         f.write(word.encode('utf8') + '\n')
 
-entity_inputs = np.zeros((np.max(entity2idx.values()) + 1, max_len * word_vec_dims),
-                         dtype='float32')
-for mid, words in items_seg:
-    id_ = entity2idx[mid]
-    if words:
-        sen_vec = np.hstack([vectors[word2idx[w]] if w in word2idx
-                             else np.zeros(50) for w in words[:max_len]]).astype('float32')
-        entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
+# entity_inputs = np.zeros((np.max(entity2idx.values()) + 1, max_len * word_vec_dims),
+#                          dtype='float32')
+# for mid, words in items_seg:
+#     id_ = entity2idx[mid]
+#     if words:
+#         sen_vec = np.hstack([vectors[word2idx[w]] if w in word2idx
+#                              else np.zeros(50) for w in words[:max_len]]).astype('float32')
+#         entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
+#
+# np.savez_compressed('../data/FB4M-concat-word-vectors.npz', entity_inputs=entity_inputs)
+# del entity_inputs
+# gc.collect()
 
-np.savez_compressed('../data/FB4M-concat-word-vectors.npz', entity_inputs=entity_inputs)
-del entity_inputs
-gc.collect()
-
-print 'finished writing concatenate word vectors feature.'
+# print 'finished writing concatenate word vectors feature.'
 
 #################################################
 ### Creation of the entities/indices dictionnaries
