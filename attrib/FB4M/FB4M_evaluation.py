@@ -8,6 +8,7 @@ import numpy as np
 import theano
 
 from model import *
+from semantic import SemanticFunc
 
 
 def load_file(path):
@@ -30,10 +31,10 @@ def RankingEval(datapath='../data/', dataset='FB4M',
                 loadmodel='best_valid_model.pkl', neval=80000, Nsyn=4661857, n=10,
                 entity_batchsize=80000, eval_batchsize=5120000):
     # Load model
-    f = open(loadmodel + '.ents')
+    f = open(loadmodel)
     sem_model = cPickle.load(f)
     embeddings = cPickle.load(f)
-    entity_embeddings = cPickle.load(f)
+    # entity_embeddings = cPickle.load(f)
     leftop = cPickle.load(f)
     rightop = cPickle.load(f)
     simfn = cPickle.load(f)
@@ -64,25 +65,34 @@ def RankingEval(datapath='../data/', dataset='FB4M',
         idxr = convert2idx(r)[:neval]
         idxo = convert2idx(o)[:neval]
 
-    # sem_func = SemanticFunc(sem_model)
+    sem_func = SemanticFunc(sem_model)
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop,
                                          subtensorspec=Nsyn)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop,
                                           subtensorspec=Nsyn)
 
     # get sem output for all entities
-    # n_entity_batches = Nsyn / entity_batchsize
-    #
-    # entity_embeddings = []
-    # for i in xrange(n_entity_batches):
-    #     entity_embeddings.append(
-    #         sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
-    #     )
-    # if n_entity_batches * entity_batchsize < Nsyn:
-    #     entity_embeddings.append(
-    #         sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
-    #     )
-    # entity_embeddings = np.vstack(entity_embeddings)
+    n_entity_batches = Nsyn / entity_batchsize
+
+    entity_embeddings = []
+    for i in xrange(n_entity_batches):
+        entity_embeddings.append(
+            sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
+        )
+    if n_entity_batches * entity_batchsize < Nsyn:
+        entity_embeddings.append(
+            sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
+        )
+    entity_embeddings = np.vstack(entity_embeddings)
+
+    with open(loadmodel + '.ents', 'w') as f:
+        cPickle.dump(sem_model, f, -1)
+        cPickle.dump(embeddings, f, -1)
+        cPickle.dump(entity_embeddings, f, -1)
+        cPickle.dump(leftop, f, -1)
+        cPickle.dump(rightop, f, -1)
+        cPickle.dump(simfn, f, -1)
+
     res = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
                               entity_embeddings, idxl, idxr,
                               idxo, eval_batchsize)

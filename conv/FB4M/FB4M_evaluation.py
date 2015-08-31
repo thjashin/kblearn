@@ -14,9 +14,9 @@ def convert2idx(spmat):
     return rows[np.argsort(cols)]
 
 
-def RankingEval(datapath='../data/', dataset='FB15k-test',
+def RankingEval(datapath='../data/', dataset='FB4M-test',
                 loadmodel='best_valid_model.pkl', neval='all', Nsyn=14951, n=10,
-                idx2synsetfile='FB15k_idx2entity.pkl'):
+                idx2synsetfile='FB4M_idx2entity.pkl'):
     # Load model
     f = open(loadmodel)
     embeddings = cPickle.load(f)

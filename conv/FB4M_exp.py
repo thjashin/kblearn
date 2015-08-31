@@ -1,4 +1,7 @@
-#! /usr/bin/python
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import cPickle
 
 from model import *
 from semantic import build_model
@@ -77,7 +80,7 @@ def toidx(input_, n_eval):
 
 
 # Experiment function --------------------------------------------------------
-def FB15kexp(state, channel):
+def FB4Mexp(state, channel):
     # Show experiment parameters
     print >> sys.stderr, state
     np.random.seed(state.seed)
@@ -328,9 +331,9 @@ def FB15kexp(state, channel):
     return channel.COMPLETE
 
 
-def launch(datapath='data/', dataset='FB15k', Nent=16296,
+def launch(datapath='data/', dataset='FB4M', Nent=16296,
            Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
-           simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, momentum=0.9,
+           simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
            lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
            seed=123, savepath='.', printbatches=1):
     # Argument of the experiment script
@@ -347,7 +350,7 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
     state.simfn = simfn
     state.ndim = ndim
     state.nhid = nhid
-    state.marge = marge
+    state.marge = margin
     state.lrweights = lrweights
     state.momentum = momentum
     state.lremb = lremb
@@ -379,7 +382,7 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
 
     channel = Channel(state)
 
-    FB15kexp(state, channel)
+    FB4Mexp(state, channel)
 
 
 if __name__ == '__main__':
