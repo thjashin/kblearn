@@ -129,6 +129,11 @@ max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 
+concat_words_cut = np.zeros((len(items_seg), max_len), dtype='int')
+for i, wids in enumerate(items_seg):
+    concat_words_cut[i] = wids[:max_len]
+np.savez_compressed('FB4M_concat-words.npz', entity_words=concat_words_cut)
+
 # with open('miss.txt', 'w') as f:
 #     for word in miss:
 #         f.write(word.encode('utf8') + '\n')

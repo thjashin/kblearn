@@ -90,6 +90,13 @@ class DD(dict):
         return z
 
 
+def input_transform(wordvec, input_):
+    M, N = input_.shape
+    ret = np.zeros((M, N * wordvec.syn0.shape[1]), dtype='float')
+    for i, line in enumerate(input_):
+        ret[i] = wordvec[line].flatten()
+    return ret
+
 # ----------------------------------------------------------------------------
 
 
@@ -110,19 +117,19 @@ def FB4Mexp(state, channel):
         if not os.path.isdir(state.savepath):
             os.mkdir(state.savepath)
 
-    # load word2id
+    # load id2word
     with open(state.datapath + state.dataset + '_id2word.pkl', 'r') as f:
         id2word = cPickle.load(f)
 
     # load concatenate words
-    print 'loading concatenate words'
-    with open(state.datapath + state.dataset + '_concat-words.txt', 'r') as f:
-        entity_words = [map(int, line.split(' ')) for line in f]
+    print 'loading concatenate words...'
+    entity_words = np.load(state.datapath + state.dataset + '_concat-words.npz')['entity_words']
 
     # load word2vec
     print 'loading word2vec...'
     wordvec = gensim.models.Word2Vec.load_word2vec_format(
         'GoogleNews-vectors-negative300.bin.gz', binary=True)
+    wordvec_dim = wordvec.syn0.shape[1]
 
     # Positives
     trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
@@ -213,7 +220,7 @@ def FB4Mexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_ngrams.shape[1], state.ndim, batch_size=None)
+    sem_model = build_model(entity_words.shape[1] * wordvec_dim, state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
                               rightop, margin=state.margin, rel=False)
     sem_func = SemanticFunc(sem_model)
@@ -245,10 +252,10 @@ def FB4Mexp(state, channel):
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
             tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
             tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
-            sem_inputl = entity_ngrams.T.dot(tmpl).T.toarray()
-            sem_inputr = entity_ngrams.T.dot(tmpr).T.toarray()
-            sem_inputnl = entity_ngrams.T.dot(tmpnl).T.toarray()
-            sem_inputnr = entity_ngrams.T.dot(tmpnr).T.toarray()
+            sem_inputl = input_transform(wordvec, entity_words.T.dot(tmpl).T)
+            sem_inputr = input_transform(wordvec, entity_words.T.dot(tmpr).T)
+            sem_inputnl = input_transform(wordvec, entity_words.T.dot(tmpnl).T)
+            sem_inputnr = input_transform(wordvec, entity_words.T.dot(tmpnr).T)
 
             # training iteration
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
@@ -282,11 +289,13 @@ def FB4Mexp(state, channel):
             entity_embeddings = []
             for i in xrange(n_entity_batches):
                 entity_embeddings.append(
-                    sem_func(entity_ngrams[i * entity_batchsize:(i + 1) * entity_batchsize].toarray())[0]
+                    sem_func(input_transform(
+                        wordvec, entity_words[i * entity_batchsize:(i + 1) * entity_batchsize]))[0]
                 )
             if n_entity_batches * entity_batchsize < state.Nsyn:
                 entity_embeddings.append(
-                    sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
+                    sem_func(input_transform(
+                        wordvec, entity_words[n_entity_batches * entity_batchsize:]))[0]
                 )
             entity_embeddings = np.vstack(entity_embeddings)
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,

@@ -14,8 +14,8 @@ def build_model(input_dim, output_dim, batch_size=None):
     l_conv11 = dnn.Conv2DDNNLayer(
         l_in,
         num_filters=32,
-        filter_size=(1, 50),
-        strides=(1, 50),
+        filter_size=(1, 300),
+        strides=(1, 300),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
@@ -88,4 +88,9 @@ def build_model(input_dim, output_dim, batch_size=None):
         W=lasagne.init.GlorotUniform(),
     )
     return l_out
- 
+
+
+def SemanticFunc(sem_model):
+    input_ = T.matrix('input_')
+    output = sem_model.get_output(input_, deterministic=True)
+    return theano.function([input_], [output])
