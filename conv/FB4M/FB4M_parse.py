@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import cPickle
 import gc
@@ -92,7 +93,6 @@ with open('../data/FB4M_id2word.pkl', 'w') as f:
 
 with open('../data/FB4M_concat-words.txt', 'w') as f:
     f.write('\n'.join([' '.join(map(str, i)) for i in items_seg]))
-print 'write FB4M_concat-words finished.'
 
 ###########################################################
 ### Creation of concatenate word vector feature for text
@@ -131,8 +131,11 @@ print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 
 concat_words_cut = np.zeros((len(items_seg), max_len), dtype='int')
 for i, wids in enumerate(items_seg):
-    concat_words_cut[i] = wids[:max_len]
-np.savez_compressed('FB4M_concat-words.npz', entity_words=concat_words_cut)
+    concat_words_cut[i, :min(len(wids), max_len)] = wids[:max_len]
+np.savez_compressed('../data/FB4M_concat-words.npz', entity_words=concat_words_cut)
+
+print 'write FB4M_concat-words finished.'
+sys.stdout.flush()
 
 # with open('miss.txt', 'w') as f:
 #     for word in miss:

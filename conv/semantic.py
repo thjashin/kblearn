@@ -91,6 +91,6 @@ def build_model(input_dim, output_dim, batch_size=None):
 
 
 def SemanticFunc(sem_model):
-    input_ = T.matrix('input_')
+    input_ = T.tensor4('input_')
     output = sem_model.get_output(input_, deterministic=True)
     return theano.function([input_], [output])

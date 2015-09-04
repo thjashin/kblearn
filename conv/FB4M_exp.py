@@ -90,11 +90,15 @@ class DD(dict):
         return z
 
 
-def input_transform(wordvec, input_):
+def input_transform(wordvec, id2word, input_):
     M, N = input_.shape
-    ret = np.zeros((M, N * wordvec.syn0.shape[1]), dtype='float')
+    D = wordvec.syn0.shape[1]
+    ret = np.zeros((M, 1, 1, N * D), dtype='float32')
     for i, line in enumerate(input_):
-        ret[i] = wordvec[line].flatten()
+        for pos, j in enumerate(line):
+            word = id2word[j]
+            if word in wordvec.vocab:
+                ret[i, 0, 0, pos * D:(pos + 1) * D] = wordvec[word] * 10
     return ret
 
 # ----------------------------------------------------------------------------
@@ -122,13 +126,13 @@ def FB4Mexp(state, channel):
         id2word = cPickle.load(f)
 
     # load concatenate words
-    print 'loading concatenate words...'
+    print >> sys.stderr, 'loading concatenate words...'
     entity_words = np.load(state.datapath + state.dataset + '_concat-words.npz')['entity_words']
 
     # load word2vec
-    print 'loading word2vec...'
+    print >> sys.stderr, 'loading word2vec...'
     wordvec = gensim.models.Word2Vec.load_word2vec_format(
-        'GoogleNews-vectors-negative300.bin.gz', binary=True)
+        '/mfs/jiaxin/data/word2vec/GoogleNews-vectors-negative300.bin.gz', binary=True)
     wordvec_dim = wordvec.syn0.shape[1]
 
     # Positives
@@ -231,6 +235,7 @@ def FB4Mexp(state, channel):
 
     out = []
     outb = []
+    lhs_norms = []
     state.bestvalid = -1
 
     print >> sys.stderr, "BEGIN TRAINING"
@@ -252,23 +257,33 @@ def FB4Mexp(state, channel):
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
             tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
             tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
-            sem_inputl = input_transform(wordvec, entity_words.T.dot(tmpl).T)
-            sem_inputr = input_transform(wordvec, entity_words.T.dot(tmpr).T)
-            sem_inputnl = input_transform(wordvec, entity_words.T.dot(tmpnl).T)
-            sem_inputnr = input_transform(wordvec, entity_words.T.dot(tmpnr).T)
+            sem_inputl = input_transform(wordvec, id2word, tmpl.T.dot(entity_words))
+            sem_inputr = input_transform(wordvec, id2word, tmpr.T.dot(entity_words))
+            sem_inputnl = input_transform(wordvec, id2word, tmpnl.T.dot(entity_words))
+            sem_inputnr = input_transform(wordvec, id2word, tmpnr.T.dot(entity_words))
 
             # training iteration
+            print >> sys.stderr, 'batch %d.%d' % (epoch_count, i)
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
             out += [outtmp[0] / float(batchsize)]
             outb += [outtmp[1]]
+
+            lhs = outtmp[2]
+            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
+            lhs_norms.append(lhs_norm)
             # print 'relation updates:', outtmp[2]
             # embeddings normalization
             # if type(embeddings) is list:
             #     embeddings[0].normalize()
             # else:
             #     embeddings.normalize()
+            if i > 0 and i % state.printbatches == 0:
+                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
+                    epoch_count, i, out[-1])
+                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
+                lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))
@@ -290,12 +305,12 @@ def FB4Mexp(state, channel):
             for i in xrange(n_entity_batches):
                 entity_embeddings.append(
                     sem_func(input_transform(
-                        wordvec, entity_words[i * entity_batchsize:(i + 1) * entity_batchsize]))[0]
+                        wordvec, id2word, entity_words[i * entity_batchsize:(i + 1) * entity_batchsize]))[0]
                 )
             if n_entity_batches * entity_batchsize < state.Nsyn:
                 entity_embeddings.append(
                     sem_func(input_transform(
-                        wordvec, entity_words[n_entity_batches * entity_batchsize:]))[0]
+                        wordvec, id2word, entity_words[n_entity_batches * entity_batchsize:]))[0]
                 )
             entity_embeddings = np.vstack(entity_embeddings)
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
@@ -347,8 +362,9 @@ def FB4Mexp(state, channel):
 def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
            Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
-           lremb=0.1, lrparam=1., nbatches=1000, totepochs=2000, test_all=1, neval=50,
-           seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
+           lremb=0.1, lrparam=1., nbatches=1000, totepochs=1000, test_all=1, neval=50,
+           seed=123, savepath='.', eval_batchsize=5120000, entity_batchsize=80000,
+           printbatches=40):
     # Argument of the experiment script
     state = DD()
 
@@ -376,6 +392,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
     state.savepath = savepath
     state.eval_batchsize = eval_batchsize
     state.entity_batchsize = entity_batchsize
+    state.printbatches = printbatches
 
     if not os.path.isdir(state.savepath):
         os.mkdir(state.savepath)

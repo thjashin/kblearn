@@ -11,11 +11,13 @@ launch(
     momentum=0.9,
     lremb=0.01,
     lrparam=1.0 / 4000,
-    nbatches=4000,
-    printbatches=40,
+    nbatches=2000,
+    printbatches=1,
     totepochs=1000,
     test_all=1,
     neval=1000,
     savepath='FB4M_TransE',
-    datapath='../data/'
+    datapath='../data/',
+    eval_batchsize=5120000,
+    entity_batchsize=10000,
 )

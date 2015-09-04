@@ -873,11 +873,11 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
     weights = lasagne.layers.get_all_params(sem_model)
 
     # Inputs
-    sem_inputl = T.matrix()
-    sem_inputr = T.matrix()
+    sem_inputl = T.tensor4()
+    sem_inputr = T.tensor4()
     inpo = S.csr_matrix()
-    sem_inputln = T.matrix()
-    sem_inputrn = T.matrix()
+    sem_inputln = T.tensor4()
+    sem_inputrn = T.tensor4()
     lrparams = T.scalar('lrparams')
     lrembeddings = T.scalar('lrembeddings')
     lrweights = T.scalar('lrweights')
@@ -970,7 +970,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
                        i.e. for which an update occurs.
     """
     return theano.function(list_in,
-                           [T.mean(cost), T.mean(out), relation_updates.values()[0] - relation_updates.keys()[0]],
+                           [T.mean(cost), T.mean(out), lhs],
                            updates=updates, on_unused_input='ignore')
 
 
