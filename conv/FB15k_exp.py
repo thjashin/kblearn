@@ -76,6 +76,11 @@ class DD(dict):
         return z
 
 
+def toidx(input_, n_eval):
+    idxs = convert2idx(input_)
+    return idxs, idxs[:n_eval]
+
+
 # Experiment function --------------------------------------------------------
 def FB15kexp(state, channel):
     # Show experiment parameters
@@ -102,22 +107,22 @@ def FB15kexp(state, channel):
     print 'entity_inputs.shape:', entity_inputs.shape
 
     # Positives
-    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')
-    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')
+    trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
+    trainr = load_file(state.datapath + state.dataset + '-train-rhs.pkl')[:state.Nsyn, :]
     traino = load_file(state.datapath + state.dataset + '-train-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         traino = traino[-state.Nrel:, :]
 
     # Valid set
-    validl = load_file(state.datapath + state.dataset + '-valid-lhs.pkl')
-    validr = load_file(state.datapath + state.dataset + '-valid-rhs.pkl')
+    validl = load_file(state.datapath + state.dataset + '-valid-lhs.pkl')[:state.Nsyn, :]
+    validr = load_file(state.datapath + state.dataset + '-valid-rhs.pkl')[:state.Nsyn, :]
     valido = load_file(state.datapath + state.dataset + '-valid-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         valido = valido[-state.Nrel:, :]
 
     # Test set
-    testl = load_file(state.datapath + state.dataset + '-test-lhs.pkl')
-    testr = load_file(state.datapath + state.dataset + '-test-rhs.pkl')
+    testl = load_file(state.datapath + state.dataset + '-test-lhs.pkl')[:state.Nsyn, :]
+    testr = load_file(state.datapath + state.dataset + '-test-rhs.pkl')[:state.Nsyn, :]
     testo = load_file(state.datapath + state.dataset + '-test-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         testo = testo[-state.Nrel:, :]
@@ -132,17 +137,17 @@ def FB15kexp(state, channel):
     print 'traino.shape:', traino.shape
 
     # Index conversion
-    trainlidx = convert2idx(trainl)
+    trainlidx, trainlidx_eval = toidx(trainl, state.neval)
     print 'trainlidx.shape:', trainlidx.shape
-    trainlidx = trainlidx[:state.neval]
-    trainridx = convert2idx(trainr)[:state.neval]
-    trainoidx = convert2idx(traino)[:state.neval]
-    validlidx = convert2idx(validl)[:state.neval]
-    validridx = convert2idx(validr)[:state.neval]
-    validoidx = convert2idx(valido)[:state.neval]
-    testlidx = convert2idx(testl)[:state.neval]
-    testridx = convert2idx(testr)[:state.neval]
-    testoidx = convert2idx(testo)[:state.neval]
+    print 'trainlidx_eval.shape:', trainlidx_eval.shape
+    trainridx, trainridx_eval = toidx(trainr, state.neval)
+    trainoidx, trainoidx_eval = toidx(traino, state.neval)
+    validlidx, validlidx_eval = toidx(validl, state.neval)
+    validridx, validridx_eval = toidx(validr, state.neval)
+    validoidx, validoidx_eval = toidx(valido, state.neval)
+    testlidx, testlidx_eval = toidx(testl, state.neval)
+    testridx, testridx_eval = toidx(testr, state.neval)
+    testoidx, testoidx_eval = toidx(testo, state.neval)
 
     # Model declaration
     if not state.loadmodel:
@@ -221,16 +226,7 @@ def FB15kexp(state, channel):
         lhs_norms = []
 
         for i in range(state.nbatches):
-            # tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
-            # tmpr = trainr[:, i * batchsize:(i + 1) * batchsize]
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
-            # tmpnl = trainln[:, i * batchsize:(i + 1) * batchsize]
-            # tmpnr = trainrn[:, i * batchsize:(i + 1) * batchsize]
-            # sem_inputl = entity_inputs.T.dot(tmpl.toarray()).T
-            # sem_inputr = entity_inputs.T.dot(tmpr.toarray()).T
-            # sem_inputnl = entity_inputs.T.dot(tmpnl.toarray()).T
-            # sem_inputnr = entity_inputs.T.dot(tmpnr.toarray()).T
-
             tmpl_idx = trainlidx[i * batchsize:(i + 1) * batchsize]
             tmpr_idx = trainridx[i * batchsize:(i + 1) * batchsize]
             tmpnl_idx = trainlnidx[i * batchsize:(i + 1) * batchsize]
@@ -239,6 +235,7 @@ def FB15kexp(state, channel):
             sem_inputr = entity_inputs[tmpr_idx]
             sem_inputnl = entity_inputs[tmpnl_idx]
             sem_inputnr = entity_inputs[tmpnr_idx]
+
             # print 'sem_inputl.shape:', sem_inputl.shape
 
             # training iteration
@@ -260,8 +257,8 @@ def FB15kexp(state, channel):
             # else:
             #     embeddings.normalize()
             if i > 0 and i % state.printbatches == 0:
-                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
-                    epoch_count, i, out[-1])
+                print >> sys.stderr, 'batch %d.%d, avg5 cost: %f' % (
+                    epoch_count, i, np.mean(out[-5:]))
                 print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
                 lhs_norms = []
 
@@ -295,19 +292,19 @@ def FB15kexp(state, channel):
             entity_embeddings = np.vstack(entity_embeddings)
 
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, validlidx, validridx,
-                                           validoidx, eval_batchsize)
+                                           entity_embeddings, validlidx_eval, validridx_eval,
+                                           validoidx_eval, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
             restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, trainlidx, trainridx,
-                                           trainoidx, eval_batchsize)
+                                           entity_embeddings, trainlidx_eval, trainridx_eval,
+                                           trainoidx_eval, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                 state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
                 restest = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                              entity_embeddings, testlidx, testridx,
-                                              testoidx, eval_batchsize)
+                                              entity_embeddings, testlidx_eval, testridx_eval,
+                                              testoidx_eval, eval_batchsize)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
