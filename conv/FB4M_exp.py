@@ -267,7 +267,7 @@ def FB4Mexp(state, channel):
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            out += [outtmp[0] / float(batchsize)]
+            out += [outtmp[0]]
             outb += [outtmp[1]]
 
             lhs = outtmp[2]
@@ -280,8 +280,8 @@ def FB4Mexp(state, channel):
             # else:
             #     embeddings.normalize()
             if i > 0 and i % state.printbatches == 0:
-                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
-                    epoch_count, i, out[-1])
+                print >> sys.stderr, 'batch %d.%d, avg5 cost: %f' % (
+                    epoch_count, i, np.mean(out[-5:]))
                 print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
                 lhs_norms = []
 

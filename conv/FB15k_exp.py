@@ -1,8 +1,15 @@
 #! /usr/bin/python
+import os
+import scipy
+from scipy import sparse
+import cPickle
 
 import lasagne
+import sys
+import time
 from model import *
-from semantic import build_model
+from semantic import build_model, SemanticFunc
+
 
 # Utils ----------------------------------------------------------------------
 def create_random_mat(shape, listidx=None):
@@ -20,7 +27,7 @@ def create_random_mat(shape, listidx=None):
         listidx = np.arange(shape[0])
     listidx = listidx[np.random.permutation(len(listidx))]
     randommat = scipy.sparse.lil_matrix((shape[0], shape[1]),
-            dtype=theano.config.floatX)
+                                        dtype=theano.config.floatX)
     idx_term = 0
     for idx_ex in range(shape[1]):
         if idx_term == len(listidx):
@@ -32,7 +39,7 @@ def create_random_mat(shape, listidx=None):
 
 def load_file(path):
     return scipy.sparse.csr_matrix(cPickle.load(open(path)),
-            dtype=theano.config.floatX)
+                                   dtype=theano.config.floatX)
 
 
 def convert2idx(spmat):
@@ -68,15 +75,9 @@ class DD(dict):
             z[k] = copy.deepcopy(kv, memo)
         return z
 
-# ----------------------------------------------------------------------------
-
-def toidx(input_, n_eval):
-    idxs = convert2idx(input_)
-    return idxs, idxs[:n_eval]
 
 # Experiment function --------------------------------------------------------
 def FB15kexp(state, channel):
-
     # Show experiment parameters
     print >> sys.stderr, state
     np.random.seed(state.seed)
@@ -90,13 +91,14 @@ def FB15kexp(state, channel):
         if not os.path.isdir(state.savepath):
             os.mkdir(state.savepath)
 
-    # load concatenate word vector features of entities
     entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
-        'entity_inputs'].astype(theano.config.floatX) * 200
-    # entity_inputs = load_file(state.datapath + state.dataset + '-bag-of-3grams.pkl').astype(theano.config.floatX).toarray()
+        'entity_inputs'].astype(theano.config.floatX)
+    print >> sys.stderr, 'max(entity_inputs): %s, min(entity_inputs): %s, mean: %s' % (
+        np.max(entity_inputs), np.min(entity_inputs), np.mean(entity_inputs))
+    entity_inputs -= np.mean(entity_inputs)
+    entity_inputs *= 10
     M, N = entity_inputs.shape
     entity_inputs = entity_inputs.reshape((M, 1, 1, N))
-    entity_inputs_shared = shared_sem_inputs(entity_inputs)
     print 'entity_inputs.shape:', entity_inputs.shape
 
     # Positives
@@ -119,43 +121,46 @@ def FB15kexp(state, channel):
     testo = load_file(state.datapath + state.dataset + '-test-rel.pkl')
     if state.op == 'SE' or state.op == 'TransE':
         testo = testo[-state.Nrel:, :]
- 
+
     batchsize = trainl.shape[1] / state.nbatches
+    eval_batchsize = state.eval_batchsize
+    entity_batchsize = state.entity_batchsize
+    n_entity_batches = state.Nsyn / entity_batchsize
 
     print 'trainl.shape:', trainl.shape
     print 'trainr.shape:', trainr.shape
     print 'traino.shape:', traino.shape
 
     # Index conversion
-    trainlidx, trainlidx_eval = toidx(trainl, state.neval)
+    trainlidx = convert2idx(trainl)
     print 'trainlidx.shape:', trainlidx.shape
-    print 'trainlidx_eval.shape:', trainlidx_eval.shape
-    trainridx, trainridx_eval = toidx(trainr, state.neval)
-    trainoidx, trainoidx_eval = toidx(traino, state.neval)
-    validlidx, validlidx_eval = toidx(validl, state.neval)
-    validridx, validridx_eval = toidx(validr, state.neval)
-    validoidx, validoidx_eval = toidx(valido, state.neval)
-    testlidx, testlidx_eval = toidx(testl, state.neval)
-    testridx, testridx_eval = toidx(testr, state.neval)
-    testoidx, testoidx_eval = toidx(testo, state.neval)
+    trainlidx = trainlidx[:state.neval]
+    trainridx = convert2idx(trainr)[:state.neval]
+    trainoidx = convert2idx(traino)[:state.neval]
+    validlidx = convert2idx(validl)[:state.neval]
+    validridx = convert2idx(validr)[:state.neval]
+    validoidx = convert2idx(valido)[:state.neval]
+    testlidx = convert2idx(testl)[:state.neval]
+    testridx = convert2idx(testr)[:state.neval]
+    testoidx = convert2idx(testo)[:state.neval]
 
     # Model declaration
     if not state.loadmodel:
         # operators
         if state.op == 'Unstructured':
-            leftop  = Unstructured()
+            leftop = Unstructured()
             rightop = Unstructured()
         elif state.op == 'SME_lin':
-            leftop  = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
+            leftop = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
             rightop = LayerLinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'right')
         elif state.op == 'SME_bil':
-            leftop  = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
+            leftop = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'left')
             rightop = LayerBilinear(np.random, 'lin', state.ndim, state.ndim, state.nhid, 'right')
         elif state.op == 'SE':
-            leftop  = LayerMat('lin', state.ndim, state.nhid)
+            leftop = LayerMat('lin', state.ndim, state.nhid)
             rightop = LayerMat('lin', state.ndim, state.nhid)
         elif state.op == 'TransE':
-            leftop  = LayerTrans()
+            leftop = LayerTrans()
             rightop = Unstructured()
         # embeddings
         if not state.loademb:
@@ -182,26 +187,19 @@ def FB15kexp(state, channel):
 
     # Function compilation
     sem_model = build_model(entity_inputs.shape[3], state.ndim, batch_size=batchsize)
-    # sem_model = build_model(entity_inputs.shape[1], state.ndim, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
-            rightop, marge=state.marge, rel=False)
-    ranklfunc = RankLeftFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-            rightop, subtensorspec=state.Nsyn)
-    rankrfunc = RankRightFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-            rightop, subtensorspec=state.Nsyn)
-
-    valid_sem_inputl = entity_inputs[validlidx_eval]
-    valid_sem_inputr = entity_inputs[validridx_eval]
-    train_sem_inputl = entity_inputs[trainlidx_eval]
-    train_sem_inputr = entity_inputs[trainridx_eval]
-    test_sem_inputl = entity_inputs[testlidx_eval]
-    test_sem_inputr = entity_inputs[testridx_eval]
+                              rightop, margin=state.margin, rel=False)
+    sem_func = SemanticFunc(sem_model)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
+                                         rightop, subtensorspec=state.Nsyn)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
+                                          rightop, subtensorspec=state.Nsyn)
 
     out = []
     outb = []
     state.bestvalid = -1
     relation_update_ratio = []
-    
+
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
     for epoch_count in xrange(1, state.totepochs + 1):
@@ -221,7 +219,7 @@ def FB15kexp(state, channel):
         trainrnidx = convert2idx(trainrn)
 
         lhs_norms = []
-        
+
         for i in range(state.nbatches):
             # tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
             # tmpr = trainr[:, i * batchsize:(i + 1) * batchsize]
@@ -254,7 +252,7 @@ def FB15kexp(state, channel):
             lhs = outtmp[2]
             lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
             lhs_norms.append(lhs_norm)
-            out.append(outtmp[0] / float(batchsize))
+            out.append(outtmp[0])
             outb.append(outtmp[1])
             # embeddings normalization
             # if type(embeddings) is list:
@@ -275,25 +273,41 @@ def FB15kexp(state, channel):
         if (epoch_count % state.test_all) == 0:
             # model evaluation
             print >> sys.stderr, "-- EPOCH %s (%s seconds per epoch):" % (
-                    epoch_count,
-                    round(time.time() - timeref, 3) / float(state.test_all))
+                epoch_count,
+                round(time.time() - timeref, 3) / float(state.test_all))
             timeref = time.time()
             print >> sys.stderr, "COST >> %s +/- %s, %% updates: %s%%" % (
-                    round(np.mean(out), 4), round(np.std(out), 4),
-                    round(np.mean(outb) * 100, 3))
+                round(np.mean(out), 4), round(np.std(out), 4),
+                round(np.mean(outb) * 100, 3))
             out = []
             outb = []
-            resvalid = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                    validlidx_eval, valid_sem_inputl, validridx_eval, valid_sem_inputr, validoidx_eval)
+
+            # get sem output for all entities
+            entity_embeddings = []
+            for i in xrange(n_entity_batches):
+                entity_embeddings.append(
+                    sem_func(entity_inputs[i * entity_batchsize:(i + 1) * entity_batchsize])[0]
+                )
+            if n_entity_batches * entity_batchsize < state.Nsyn:
+                entity_embeddings.append(
+                    sem_func(entity_inputs[n_entity_batches * entity_batchsize:])[0]
+                )
+            entity_embeddings = np.vstack(entity_embeddings)
+
+            resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                           entity_embeddings, validlidx, validridx,
+                                           validoidx, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
-            restrain = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                    trainlidx_eval, train_sem_inputl, trainridx_eval, train_sem_inputr, trainoidx_eval)
+            restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                           entity_embeddings, trainlidx, trainridx,
+                                           trainoidx, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
-                    state.valid, state.train)
+                state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
-                restest = FastRankingScoreIdx(ranklfunc, rankrfunc,
-                        testlidx_eval, test_sem_inputl, testridx_eval, test_sem_inputr, testoidx_eval)
+                restest = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                                              entity_embeddings, testlidx, testridx,
+                                              testoidx, eval_batchsize)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
@@ -302,16 +316,18 @@ def FB15kexp(state, channel):
                 f = open(state.savepath + '/best_valid_model.pkl', 'w')
                 cPickle.dump(sem_model, f, -1)
                 cPickle.dump(embeddings, f, -1)
+                cPickle.dump(entity_embeddings, f, -1)
                 cPickle.dump(leftop, f, -1)
                 cPickle.dump(rightop, f, -1)
                 cPickle.dump(simfn, f, -1)
                 f.close()
                 print >> sys.stderr, "\t\t##### NEW BEST VALID >> test: %s" % (
-                        state.besttest)
+                    state.besttest)
             # Save current model
             f = open(state.savepath + '/current_model.pkl', 'w')
             cPickle.dump(sem_model, f, -1)
             cPickle.dump(embeddings, f, -1)
+            cPickle.dump(entity_embeddings, f, -1)
             cPickle.dump(leftop, f, -1)
             cPickle.dump(rightop, f, -1)
             cPickle.dump(simfn, f, -1)
@@ -325,11 +341,11 @@ def FB15kexp(state, channel):
 
 
 def launch(datapath='data/', dataset='FB15k', Nent=16296,
-        Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
-        simfn='Dot', ndim=50, nhid=50, marge=1., lrweights=0.1, momentum=0.9,
-        lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
-        seed=123, savepath='.', printbatches=1):
-
+           Nsyn=14951, Nrel=1345, loadmodel=False, loademb=False, op='Unstructured',
+           simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
+           lremb=0.1, lrparam=1., nbatches=4000, totepochs=2000, test_all=1, neval=50,
+           seed=123, savepath='.', eval_batchsize=500000, entity_batchsize=20000,
+           printbatches=1):
     # Argument of the experiment script
     state = DD()
 
@@ -344,18 +360,20 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
     state.simfn = simfn
     state.ndim = ndim
     state.nhid = nhid
-    state.marge = marge
+    state.margin = margin
     state.lrweights = lrweights
     state.momentum = momentum
     state.lremb = lremb
     state.lrparam = lrparam
     state.nbatches = nbatches
-    state.printbatches = printbatches
     state.totepochs = totepochs
     state.test_all = test_all
     state.neval = neval
     state.seed = seed
     state.savepath = savepath
+    state.eval_batchsize = eval_batchsize
+    state.entity_batchsize = entity_batchsize
+    state.printbatches = printbatches
 
     if not os.path.isdir(state.savepath):
         os.mkdir(state.savepath)
@@ -377,6 +395,7 @@ def launch(datapath='data/', dataset='FB15k', Nent=16296,
     channel = Channel(state)
 
     FB15kexp(state, channel)
+
 
 if __name__ == '__main__':
     launch()

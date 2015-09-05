@@ -315,12 +315,12 @@ print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 #         f.write(word.encode('utf8') + '\n')
 
 entity_inputs = np.zeros((np.max(entity2idx.values()) + 1, max_len * word_vec_dims),
-    dtype='float32')
+                         dtype='float32')
 for mid, name, words in items_seg:
     id_ = entity2idx[mid]
     if words:
         sen_vec = np.hstack([vectors[word2idx[w]] if w in word2idx
-                         else np.zeros(300) for w in words]).astype('float32')[:max_len]
+                             else np.zeros(50) for w in words[:max_len]]).astype('float32')
         entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
 
 np.savez_compressed('../data/FB15k-concat-word-vectors.npz', entity_inputs=entity_inputs)

@@ -11,11 +11,14 @@ import lasagne
 
 # Similarity functions -------------------------------------------------------
 def L1sim(left, right):
-    return - T.sum(T.abs_(left - right), axis=1)
-
+    eps = 1e-8
+    dis = left - right
+    return - T.sum(-dis * (dis < -eps) + dis * (dis > eps), axis=1)
+    # return -T.sum(T.abs_(left - right), axis=1)
 
 def L2sim(left, right):
-    return - T.sqrt(T.sum(T.sqr(left - right), axis=1))
+    eps = 1e-6  # avoid NaN gradient when T.sqrt(0)
+    return - T.sqrt(T.sum(T.sqr(left - right), axis=1) + eps)
 
 
 def Dotsim(left, right):
@@ -26,7 +29,7 @@ def Dotsim(left, right):
 # Cost ------------------------------------------------------------------------
 def margincost(pos, neg, margin=1.0):
     out = neg - pos + margin
-    return T.sum(out * (out > 0)), out > 0
+    return T.mean(out * (out > 0)), out > 0
 # -----------------------------------------------------------------------------
 
 
@@ -884,12 +887,12 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
     momentum = T.scalar('momentum')
 
     # Graph
-    lhs = sem_model.get_output(sem_inputl)
-    rhs = sem_model.get_output(sem_inputr)
+    lhs = lasagne.layers.get_output(sem_model, inputs=sem_inputl)
+    rhs = lasagne.layers.get_output(sem_model, inputs=sem_inputr)
     rell = S.dot(relationl.E, inpo).T
     relr = S.dot(relationr.E, inpo).T
-    lhsn = sem_model.get_output(sem_inputln)
-    rhsn = sem_model.get_output(sem_inputrn)
+    lhsn = lasagne.layers.get_output(sem_model, inputs=sem_inputln)
+    rhsn = lasagne.layers.get_output(sem_model, inputs=sem_inputrn)
 
     simi = fnsim(leftop(lhs, rell), rightop(rhs, relr))
     # Negative left member
@@ -912,6 +915,10 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
         cost += costo
         out = T.concatenate([out, outo])
         list_in += [inpon]
+
+    # Add regularization
+    # cost += 1e-4 * lasagne.regularization.regularize_network_params(
+    #         sem_model, lasagne.regularization.l2)
 
     if hasattr(fnsim, 'params'):
         # If the similarity function has some parameters, we update them too.
@@ -970,7 +977,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
                        i.e. for which an update occurs.
     """
     return theano.function(list_in,
-                           [T.mean(cost), T.mean(out), lhs],
+                           [cost, T.mean(out), lhs],
                            updates=updates, on_unused_input='ignore')
 
 
