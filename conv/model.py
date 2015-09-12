@@ -795,16 +795,7 @@ def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
 
 
 def FastRankingScoreIdx(batch_sl, batch_sr, embeddings, idxl, idxr, idxo, eval_batchsize):
-    # errl1 = []
-    # errr1 = []
     N = len(idxl)
-    # K, _, _, L = sem_inputl.shape
-    # for i in xrange(N):
-    #     siml = sl(sem_inputr[i].reshape(1, 1, 1, L), idxo[i])[0]
-    #     errl1.append((siml > siml[idxl[i]]).sum())
-    #     simr = sr(sem_inputl[i].reshape(1, 1, 1, L), idxo[i])[0]
-    #     errr1.append((simr > simr[idxr[i]]).sum())
-
     errl2 = []
     errr2 = []
     for i in xrange(N):
@@ -812,11 +803,6 @@ def FastRankingScoreIdx(batch_sl, batch_sr, embeddings, idxl, idxr, idxo, eval_b
         errl2.append((siml > siml[idxl[i]]).sum())
         simr = RankFnIdx(batch_sr, embeddings, embeddings[idxl[i]], idxo[i], eval_batchsize)
         errr2.append((simr > simr[idxr[i]]).sum())
-
-    # rank1 = np.mean(errl1 + errr1)
-    # rank2 = np.mean(errl2 + errr2)
-    # print >> sys.stderr, "check same: %s, %s" % (rank1, rank2)
-
     return errl2, errr2
 
 

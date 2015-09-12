@@ -104,7 +104,6 @@ def FB15kexp(state, channel):
     entity_inputs *= 10
     M, N = entity_inputs.shape
     entity_inputs = entity_inputs.reshape((M, 1, 1, N))
-    entity_inputs_shared = theano.shared(entity_inputs, borrow=True)
     print 'entity_inputs.shape:', entity_inputs.shape
 
     # Positives
@@ -198,20 +197,11 @@ def FB15kexp(state, channel):
     sem_func = SemanticFunc(sem_model)
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop)
-    # ranklfunc = RankLeftFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-    #         rightop, subtensorspec=state.Nsyn)
-    # rankrfunc = RankRightFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
-    #         rightop, subtensorspec=state.Nsyn)
 
     out = []
     outb = []
     state.bestvalid = -1
     relation_update_ratio = []
-
-    valid_sem_inputl = entity_inputs[validlidx_eval]
-    valid_sem_inputr = entity_inputs[validridx_eval]
-    train_sem_inputl = entity_inputs[trainlidx_eval]
-    train_sem_inputr = entity_inputs[trainridx_eval]
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()

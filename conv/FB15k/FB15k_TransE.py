@@ -14,7 +14,7 @@ launch(
     nbatches=1000,
     printbatches=10,
     totepochs=1000,
-    test_all=1,
+    test_all=10,
     neval=1000,
     savepath='FB15k_TransE',
     datapath='../data/',
