@@ -14,7 +14,7 @@ import word2vec
 
 
 # Put the freebase15k data absolute path here
-datapath = '/home/jiaxin/mfs/data/FB15k/'
+datapath = '/mfs/jiaxin/data/FB15k/'
 assert datapath is not None
 
 if 'data' not in os.listdir('../'):
@@ -73,6 +73,7 @@ for i in entleftset:
     idx2entity[idx] = i
     idx += 1
 nbleft = idx - (nbshared + nbright)
+Nsyn = idx
 
 print "# of only_left/shared/only_right entities: ", nbleft, '/', nbshared, '/', nbright
 # add relations at the end of the dictionary
@@ -196,7 +197,7 @@ with open('../data/FB15k_id2word.pkl', 'w') as f:
 
 
 entity_words = sp.lil_matrix(
-    (np.max(entity2idx.values()) + 1, len(word2id)), dtype='float32')
+    (Nsyn, len(word2id)), dtype='float32')
 for mid, name, words in items_seg:
     if mid in entity2idx:
         id_ = entity2idx[mid]
@@ -240,7 +241,7 @@ with open('../data/FB15k_id2%dgram.pkl' % n, 'w') as f:
 
 entity_ngrams_dic = defaultdict(int)
 entity_ngrams = sp.lil_matrix(
-    (np.max(entity2idx.values()) + 1, len(ngram2id)), dtype='float32')
+    (Nsyn, len(ngram2id)), dtype='float32')
 
 ngramcnt = defaultdict(int)
 for mid, name, words in items_seg:
@@ -267,7 +268,7 @@ with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
 ###########################################################
 ### Creation of concatenate word vector feature for text
 
-WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
+WORD_VEC_FILE = '/mfs/jiaxin/data/word2vec/vectors-50.bin'
 wordvec = word2vec.load(WORD_VEC_FILE)
 vectors = wordvec.vectors
 vocab = wordvec.vocab
@@ -314,7 +315,7 @@ print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 #     for word in miss:
 #         f.write(word.encode('utf8') + '\n')
 
-entity_inputs = np.zeros((np.max(entity2idx.values()) + 1, max_len * word_vec_dims),
+entity_inputs = np.zeros((Nsyn, max_len * word_vec_dims),
                          dtype='float32')
 for mid, name, words in items_seg:
     id_ = entity2idx[mid]
@@ -324,4 +325,3 @@ for mid, name, words in items_seg:
         entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
 
 np.savez_compressed('../data/FB15k-concat-word-vectors.npz', entity_inputs=entity_inputs)
-

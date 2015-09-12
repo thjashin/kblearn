@@ -2,6 +2,7 @@ import copy
 from collections import OrderedDict
 
 import numpy as np
+import sys
 import theano
 import theano.sparse as S
 import theano.tensor as T
@@ -558,7 +559,7 @@ def SimFnIdx(fnsim, embeddings, leftop, rightop):
             on_unused_input='ignore')
 
 
-def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop):
     """
     This function returns a Theano function to measure the similarity score of
     all 'right' entities given couples of relation and 'left' entities (as
@@ -582,9 +583,6 @@ def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
 
     # Graph
     lhs_ = lhs.reshape((1, embedding.D))
-    if subtensorspec is not None:
-        # We compute the score only for a subset of entities
-        rhs = rhs[:subtensorspec]
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
     tmp = leftop(lhs_, rell)
@@ -602,7 +600,7 @@ def BatchRankRightFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
                            on_unused_input='ignore')
 
 
-def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
+def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop):
     """
     This function returns a Theano function to measure the similarity score of
     all 'left' entities given couples of relation and 'right' entities (as
@@ -625,9 +623,6 @@ def BatchRankLeftFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
     idxo = T.iscalar('idxo')
 
     # Graph
-    if subtensorspec is not None:
-        # We compute the score only for a subset of entities
-        lhs = lhs[:subtensorspec]
     rhs_ = rhs.reshape((1, embedding.D))
     rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
     relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
@@ -652,8 +647,99 @@ def RankFnIdx(fnbatch, embeddings, sing_item, idxo, batchsize):
     simis = []
     for i in xrange(nbatches):
         sem_batch = embeddings[i * batchsize:(i + 1) * batchsize]
-        simis.append(fnbatch(sing_item, sem_batch, idxo))
+        simis.append(fnbatch(sing_item, sem_batch, idxo)[0])
     return np.hstack(simis)
+
+
+def RankRightFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+    """
+    This function returns a Theano function to measure the similarity score of
+    all 'right' entities given couples of relation and 'left' entities (as
+    index values).
+
+    :param fnsim: similarity function (on Theano variables).
+    :param embeddings: an Embeddings instance.
+    :param leftop: class for the 'left' operator.
+    :param rightop: class for the 'right' operator.
+    :param subtensorspec: only measure the similarity score for the entities
+                          corresponding to the first subtensorspec (int)
+                          entities of the embedding matrix (default None: all
+                          entities).
+    """
+    embedding, relationl, relationr = parse_embeddings(embeddings)
+
+    # Inputs
+    sem_inputl = T.tensor4('sem_inputl')
+    idxo = T.iscalar('idxo')
+
+    # Graph
+    lhs = lasagne.layers.get_output(
+        sem_model, inputs=sem_inputl, deterministic=True).reshape((1, embedding.D))
+    if subtensorspec is not None:
+        # We compute the score only for a subset of entities
+        sem_inputs = sem_inputs[:subtensorspec]
+    rhs = lasagne.layers.get_output(
+        sem_model, inputs=sem_inputs, deterministic=True)
+    rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
+    relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
+    tmp = leftop(lhs, rell)
+    simi = fnsim(tmp.reshape((1, tmp.shape[1])), rightop(rhs, relr))
+    """
+    Theano function inputs.
+    :input sem_inputl: the semantic input of the left entity.
+    :input sem_inputsr: all the semantic inputs of right entities
+    :input idxo: index value of the relation member.
+
+    Theano function output.
+    :output simi: vector of score values.
+    """
+    return theano.function([sem_inputl, idxo], [simi],
+                           on_unused_input='ignore')
+
+
+def RankLeftFnIdx(fnsim, sem_inputs, sem_model, embeddings, leftop, rightop, subtensorspec=None):
+    """
+    This function returns a Theano function to measure the similarity score of
+    all 'left' entities given couples of relation and 'right' entities (as
+    index values).
+
+    :param fnsim: similarity function (on Theano variables).
+    :param embeddings: an Embeddings instance.
+    :param leftop: class for the 'left' operator.
+    :param rightop: class for the 'right' operator.
+    :param subtensorspec: only measure the similarity score for the entities
+                          corresponding to the first subtensorspec (int)
+                          entities of the embedding matrix (default None: all
+                          entities).
+    """
+    embedding, relationl, relationr = parse_embeddings(embeddings)
+
+    # Inputs
+    sem_inputr = T.tensor4('sem_inputr')
+    idxo = T.iscalar('idxo')
+
+    # Graph
+    if subtensorspec is not None:
+        # We compute the score only for a subset of entities
+        sem_inputs = sem_inputs[:subtensorspec]
+    lhs = lasagne.layers.get_output(sem_model, inputs=sem_inputs, deterministic=True)
+    rhs = lasagne.layers.get_output(
+        sem_model, inputs=sem_inputr, deterministic=True).reshape((1, embedding.D))
+    rell = (relationl.E[:, idxo]).reshape((1, relationl.D))
+    relr = (relationr.E[:, idxo]).reshape((1, relationr.D))
+    tmp = rightop(rhs, relr)
+    simi = fnsim(leftop(lhs, rell), tmp.reshape((1, tmp.shape[1])))
+    """
+    Theano function inputs.
+    :input sem_inputr: semantic input of the 'right' member.
+    :input sem_inputsl: all semantic inputs of 'left' entities.
+    :input idxo: index value of the relation member.
+
+    Theano function output.
+    :output simi: vector of score values.
+    """
+    return theano.function([sem_inputr, idxo], [simi],
+                           on_unused_input='ignore')
 
 
 def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
@@ -708,16 +794,30 @@ def RankRelFnIdx(fnsim, embeddings, leftop, rightop, subtensorspec=None):
             on_unused_input='ignore')
 
 
-def FastRankingScoreIdx(sl_batch, sr_batch, embeddings, idxl, idxr, idxo, batchsize):
-    errl = []
-    errr = []
+def FastRankingScoreIdx(batch_sl, batch_sr, embeddings, idxl, idxr, idxo, eval_batchsize):
+    # errl1 = []
+    # errr1 = []
     N = len(idxl)
+    # K, _, _, L = sem_inputl.shape
+    # for i in xrange(N):
+    #     siml = sl(sem_inputr[i].reshape(1, 1, 1, L), idxo[i])[0]
+    #     errl1.append((siml > siml[idxl[i]]).sum())
+    #     simr = sr(sem_inputl[i].reshape(1, 1, 1, L), idxo[i])[0]
+    #     errr1.append((simr > simr[idxr[i]]).sum())
+
+    errl2 = []
+    errr2 = []
     for i in xrange(N):
-        siml = RankFnIdx(sl_batch, embeddings, embeddings[idxr[i]], idxo[i], batchsize)[0]
-        errl.append((siml > siml[idxl[i]]).sum())
-        simr = RankFnIdx(sr_batch, embeddings, embeddings[idxl[i]], idxo[i], batchsize)[0]
-        errr.append((simr > simr[idxr[i]]).sum())
-    return errl, errr
+        siml = RankFnIdx(batch_sl, embeddings, embeddings[idxr[i]], idxo[i], eval_batchsize)
+        errl2.append((siml > siml[idxl[i]]).sum())
+        simr = RankFnIdx(batch_sr, embeddings, embeddings[idxl[i]], idxo[i], eval_batchsize)
+        errr2.append((simr > simr[idxr[i]]).sum())
+
+    # rank1 = np.mean(errl1 + errr1)
+    # rank2 = np.mean(errl2 + errr2)
+    # print >> sys.stderr, "check same: %s, %s" % (rank1, rank2)
+
+    return errl2, errr2
 
 
 def Fn(fnsim, embeddings, leftop, rightop, margin=1.0):

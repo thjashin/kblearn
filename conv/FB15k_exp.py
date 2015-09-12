@@ -104,6 +104,7 @@ def FB15kexp(state, channel):
     entity_inputs *= 10
     M, N = entity_inputs.shape
     entity_inputs = entity_inputs.reshape((M, 1, 1, N))
+    entity_inputs_shared = theano.shared(entity_inputs, borrow=True)
     print 'entity_inputs.shape:', entity_inputs.shape
 
     # Positives
@@ -195,15 +196,22 @@ def FB15kexp(state, channel):
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
                               rightop, margin=state.margin, rel=False)
     sem_func = SemanticFunc(sem_model)
-    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop,
-                                         rightop, subtensorspec=state.Nsyn)
-    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop,
-                                          rightop, subtensorspec=state.Nsyn)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop)
+    # ranklfunc = RankLeftFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
+    #         rightop, subtensorspec=state.Nsyn)
+    # rankrfunc = RankRightFnIdx(simfn, entity_inputs_shared, sem_model, embeddings, leftop,
+    #         rightop, subtensorspec=state.Nsyn)
 
     out = []
     outb = []
     state.bestvalid = -1
     relation_update_ratio = []
+
+    valid_sem_inputl = entity_inputs[validlidx_eval]
+    valid_sem_inputr = entity_inputs[validridx_eval]
+    train_sem_inputl = entity_inputs[trainlidx_eval]
+    train_sem_inputr = entity_inputs[trainridx_eval]
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
@@ -256,9 +264,13 @@ def FB15kexp(state, channel):
             #     embeddings[0].normalize()
             # else:
             #     embeddings.normalize()
+
+            # relation normalization
+            relationVec.normalize()
+
             if i > 0 and i % state.printbatches == 0:
-                print >> sys.stderr, 'batch %d.%d, avg5 cost: %f' % (
-                    epoch_count, i, np.mean(out[-5:]))
+                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
+                    epoch_count, i, out[-1])
                 print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
                 lhs_norms = []
 
@@ -291,13 +303,11 @@ def FB15kexp(state, channel):
                 )
             entity_embeddings = np.vstack(entity_embeddings)
 
-            resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, validlidx_eval, validridx_eval,
-                                           validoidx_eval, eval_batchsize)
+            resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc, entity_embeddings,
+                                           validlidx_eval, validridx_eval, validoidx_eval, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
-            restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, trainlidx_eval, trainridx_eval,
-                                           trainoidx_eval, eval_batchsize)
+            restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc, entity_embeddings,
+                                           trainlidx_eval, trainridx_eval, trainoidx_eval, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                 state.valid, state.train)
