@@ -4,10 +4,11 @@ import re
 import cPickle
 import gc
 import scipy.sparse as sp
+import word2vec
 
 import numpy as np
 from nltk.tokenize import word_tokenize
-
+from nltk.corpus import stopwords
 
 # Put the FB4M data absolute path here
 datapath = '/home/jiaxin/mfs/data/freebase-has-desc/'
@@ -44,7 +45,7 @@ for line in text:
     item = {'mid': arr[0].strip(), 'description': arr[1].strip()}
     items.append(item)
 
-# stopwords_ = set(stopwords.words())
+stopwords_ = set(stopwords.words())
 # punctuations = set(string.punctuation)
 
 word2id = {}
@@ -95,30 +96,30 @@ with open('../data/FB4M_concat-words.txt', 'w') as f:
     f.write('\n'.join([' '.join(map(str, i)) for i in items_seg]))
 
 ###########################################################
-### Creation of concatenate word vector feature for text
+### Creation of concatenate word feature for text
 
-# WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
-# wordvec = word2vec.load(WORD_VEC_FILE)
-# vectors = wordvec.vectors
-# vocab = wordvec.vocab
-# word2idx = {}
-# for i, w in enumerate(vocab):
-#     word2idx[w] = i
-#
-# word_vec_dims = vectors[word2idx['king']].shape[0]
-# print 'word_vec_dims:', word_vec_dims
+WORD_VEC_FILE = '/home/jiaxin/mfs/data/word2vec/vectors-50.bin'
+wordvec = word2vec.load(WORD_VEC_FILE)
+vectors = wordvec.vectors
+vocab = wordvec.vocab
+word2idx = {}
+for i, w in enumerate(vocab):
+    word2idx[w] = i
+
+word_vec_dims = vectors[word2idx['king']].shape[0]
+print 'word_vec_dims:', word_vec_dims
 
 # Check coverage of word vectors on vocabulary
-# total = len(word2id)
-# cnt = 0
-# miss = []
-# for word in word2id:
-#     if word in word2idx:
-#         cnt += 1
-#     else:
-#         miss.append(word)
-# print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
-#                                                        total - cnt, total)
+total = len(word2id)
+cnt = 0
+miss = []
+for word in word2id:
+    if word in word2idx:
+        cnt += 1
+    else:
+        miss.append(word)
+print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
+                                                       total - cnt, total)
 
 # Check max/min length of input text
 print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
@@ -129,13 +130,28 @@ max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 
-concat_words_cut = np.zeros((len(items_seg), max_len), dtype='int')
+concat_words_cut = np.ones((len(items_seg), max_len), dtype='int') * (len(word2id))
 for i, wids in enumerate(items_seg):
     concat_words_cut[i, :min(len(wids), max_len)] = wids[:max_len]
 np.savez_compressed('../data/FB4M_concat-words.npz', entity_words=concat_words_cut)
 
 print 'write FB4M_concat-words finished.'
 sys.stdout.flush()
+
+del items_seg
+gc.collect()
+
+# word embeddings
+word_embeddings = np.random.normal(0, 0.01, (len(word2id) + 1, 50))
+# last line for zero paddings
+word_embeddings[-1, :] = np.zeros(50)
+print 'word embeddings shape:', word_embeddings.shape
+for word, id in word2id.iteritems():
+    if word in word2idx:
+        word_embeddings[id] = vectors[word2idx[word]]
+np.savez_compressed('../data/FB4M-word-embeddings.npz',
+                    word_embeddings=word_embeddings.astype('float32'))
+print 'write FB4M word embeddings finished.'
 
 # with open('miss.txt', 'w') as f:
 #     for word in miss:
