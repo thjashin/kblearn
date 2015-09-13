@@ -4,7 +4,6 @@ import scipy
 from scipy import sparse
 import cPickle
 
-import lasagne
 import sys
 import time
 from model import *
@@ -96,15 +95,31 @@ def FB15kexp(state, channel):
         if not os.path.isdir(state.savepath):
             os.mkdir(state.savepath)
 
-    entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
-        'entity_inputs'].astype(theano.config.floatX)
-    print >> sys.stderr, 'max(entity_inputs): %s, min(entity_inputs): %s, mean: %s' % (
-        np.max(entity_inputs), np.min(entity_inputs), np.mean(entity_inputs))
-    entity_inputs -= np.mean(entity_inputs)
-    entity_inputs *= 10
-    M, N = entity_inputs.shape
-    entity_inputs = entity_inputs.reshape((M, 1, 1, N))
-    print 'entity_inputs.shape:', entity_inputs.shape
+    # load id2word
+    with open(state.datapath + state.dataset + '_id2word.pkl', 'r') as f:
+        id2word = cPickle.load(f)
+
+    # load concatenate words
+    print >> sys.stderr, 'loading concatenate words...'
+    entity_words = np.load(state.datapath + state.dataset + '_concat-words.npz')[
+        'entity_words'].astype('int32')
+    M, N = entity_words.shape
+    entity_words = entity_words.reshape((M, 1, N))
+    print >> sys.stderr, 'entity_words.shape:', entity_words.shape
+
+    # load word_embeddings
+    word_embeddings = np.load(state.datapath + state.dataset + '-word-embeddings.npz')[
+        'word_embeddings'].astype('float32')
+
+    # entity_inputs = np.load(state.datapath + state.dataset + '-concat-word-vectors.npz')[
+    #     'entity_inputs'].astype(theano.config.floatX)
+    # print >> sys.stderr, 'max(entity_inputs): %s, min(entity_inputs): %s, mean: %s' % (
+    #     np.max(entity_inputs), np.min(entity_inputs), np.mean(entity_inputs))
+    # entity_inputs -= np.mean(entity_inputs)
+    # entity_inputs *= 10
+    # M, N = entity_inputs.shape
+    # entity_inputs = entity_inputs.reshape((M, 1, 1, N))
+    # print 'entity_inputs.shape:', entity_inputs.shape
 
     # Positives
     trainl = load_file(state.datapath + state.dataset + '-train-lhs.pkl')[:state.Nsyn, :]
@@ -191,7 +206,7 @@ def FB15kexp(state, channel):
         f.close()
 
     # Function compilation
-    sem_model = build_model(entity_inputs.shape[3], state.ndim, batch_size=batchsize)
+    sem_model = build_model(entity_words.shape[2], state.ndim, word_embeddings, batch_size=batchsize)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
                               rightop, margin=state.margin, rel=False)
     sem_func = SemanticFunc(sem_model)
@@ -229,10 +244,10 @@ def FB15kexp(state, channel):
             tmpr_idx = trainridx[i * batchsize:(i + 1) * batchsize]
             tmpnl_idx = trainlnidx[i * batchsize:(i + 1) * batchsize]
             tmpnr_idx = trainrnidx[i * batchsize:(i + 1) * batchsize]
-            sem_inputl = entity_inputs[tmpl_idx]
-            sem_inputr = entity_inputs[tmpr_idx]
-            sem_inputnl = entity_inputs[tmpnl_idx]
-            sem_inputnr = entity_inputs[tmpnr_idx]
+            sem_inputl = entity_words[tmpl_idx]
+            sem_inputr = entity_words[tmpr_idx]
+            sem_inputnl = entity_words[tmpnl_idx]
+            sem_inputnr = entity_words[tmpnr_idx]
 
             # print 'sem_inputl.shape:', sem_inputl.shape
 
@@ -285,11 +300,11 @@ def FB15kexp(state, channel):
             entity_embeddings = []
             for i in xrange(n_entity_batches):
                 entity_embeddings.append(
-                    sem_func(entity_inputs[i * entity_batchsize:(i + 1) * entity_batchsize])[0]
+                    sem_func(entity_words[i * entity_batchsize:(i + 1) * entity_batchsize])[0]
                 )
             if n_entity_batches * entity_batchsize < state.Nsyn:
                 entity_embeddings.append(
-                    sem_func(entity_inputs[n_entity_batches * entity_batchsize:])[0]
+                    sem_func(entity_words[n_entity_batches * entity_batchsize:])[0]
                 )
             entity_embeddings = np.vstack(entity_embeddings)
 

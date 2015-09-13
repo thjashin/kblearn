@@ -264,9 +264,8 @@ print 'entity_ngrams.shape:', entity_ngrams.shape
 with open('../data/FB15k-bag-of-%dgrams.pkl' % n, 'w') as f:
     cPickle.dump(entity_ngrams.tocsr(), f, -1)
 
-
 ###########################################################
-### Creation of concatenate word vector feature for text
+### Generate initialization for word embeddings
 
 WORD_VEC_FILE = '/mfs/jiaxin/data/word2vec/vectors-50.bin'
 wordvec = word2vec.load(WORD_VEC_FILE)
@@ -292,36 +291,39 @@ print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
     total - cnt, total)
 
 # Check max/min length of input text
-items_seg = []
+items_id = []
 lens = []
-for item in items:
-    mid = item['mid']
-    name = item['name']
-    desc = item['description']
+for mid, name, words in items_seg:
     # letters only
-    desc = re.sub("[^a-zA-Z]", " ", desc).lower()
-    words = word_tokenize(desc.lower())
     lens.append(len(words))
-    items_seg.append((mid, name, words))
+    items_id.append((entity2idx[mid], [word2id[w] for w in words]))
 print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
     min(lens), max(lens), np.mean(lens), np.median(lens))
 
-limit_len = 240
+limit_len = 160
 max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
 
-# with open('miss.txt', 'w') as f:
-#     for word in miss:
-#         f.write(word.encode('utf8') + '\n')
+# word embeddings
+word_embeddings = np.random.normal(0, 0.01, (len(word2id) + 1, 50))
+# last line for zero paddings
+word_embeddings[-1, :] = np.zeros(50)
+print 'word embeddings shape:', word_embeddings.shape
+for word, id in word2id.iteritems():
+    if word in word2idx:
+        word_embeddings[id] = vectors[word2idx[word]]
+np.savez_compressed('../data/FB15k-word-embeddings.npz',
+                    word_embeddings=word_embeddings.astype('float32'))
 
-entity_inputs = np.zeros((Nsyn, max_len * word_vec_dims),
-                         dtype='float32')
-for mid, name, words in items_seg:
-    id_ = entity2idx[mid]
-    if words:
-        sen_vec = np.hstack([vectors[word2idx[w]] if w in word2idx
-                             else np.zeros(50) for w in words[:max_len]]).astype('float32')
-        entity_inputs[id_, :sen_vec.shape[0]] = sen_vec
+###########################################################
+### Creation of concatenate words for text
 
-np.savez_compressed('../data/FB15k-concat-word-vectors.npz', entity_inputs=entity_inputs)
+concat_words_cut = np.ones((Nsyn, max_len), dtype='int') * (len(word2id))
+
+for i, wids in items_id:
+    concat_words_cut[i, :min(len(wids), max_len)] = wids[:max_len]
+np.savez_compressed('../data/FB15k_concat-words.npz', entity_words=concat_words_cut)
+
+print 'write FB15k_concat-words finished.'
+sys.stdout.flush()

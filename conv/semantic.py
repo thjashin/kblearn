@@ -7,15 +7,26 @@ import lasagne
 from lasagne.layers import dnn
 
 
-def build_model(input_dim, output_dim, batch_size=None):
+def build_model(input_dim, output_dim, word_vectors, batch_size=None):
+    V, D = word_vectors.shape
     l_in = lasagne.layers.InputLayer(
-        shape=(batch_size, 1, 1, input_dim),
+        shape=(batch_size, 1, input_dim),
+    )
+    l_emb = lasagne.layers.EmbeddingLayer(
+        l_in,
+        input_size=V,
+        output_size=D,
+        W=word_vectors.astype('float32'),
+    )
+    l_transpose = lasagne.layers.DimshuffleLayer(
+        l_emb,
+        pattern=(0, 1, 3, 2),
     )
     l_conv11 = dnn.Conv2DDNNLayer(
-        l_in,
+        l_transpose,
         num_filters=32,
-        filter_size=(1, 50),
-        stride=(1, 50),
+        filter_size=(D, 1),
+        stride=(D, 1),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
     )
@@ -107,6 +118,6 @@ def build_model(input_dim, output_dim, batch_size=None):
 
 
 def SemanticFunc(sem_model):
-    input_ = T.tensor4('input_')
+    input_ = T.itensor3('input_')
     output = lasagne.layers.get_output(sem_model, inputs=input_, deterministic=True)
     return theano.function([input_], [output])

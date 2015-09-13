@@ -962,11 +962,11 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
     weights = lasagne.layers.get_all_params(sem_model)
 
     # Inputs
-    sem_inputl = T.tensor4()
-    sem_inputr = T.tensor4()
+    sem_inputl = T.itensor3()
+    sem_inputr = T.itensor3()
     inpo = S.csr_matrix()
-    sem_inputln = T.tensor4()
-    sem_inputrn = T.tensor4()
+    sem_inputln = T.itensor3()
+    sem_inputrn = T.itensor3()
     lrparams = T.scalar('lrparams')
     lrembeddings = T.scalar('lrembeddings')
     lrweights = T.scalar('lrweights')
