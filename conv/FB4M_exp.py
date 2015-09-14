@@ -325,19 +325,19 @@ def FB4Mexp(state, channel):
             entity_embeddings = np.vstack(entity_embeddings)
 
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, validlidx, validridx,
-                                           validoidx, eval_batchsize)
+                                           entity_embeddings, validlidx_eval, validridx_eval,
+                                           validoidx_eval, eval_batchsize)
             state.valid = np.mean(resvalid[0] + resvalid[1])
             restrain = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                           entity_embeddings, trainlidx, trainridx,
-                                           trainoidx, eval_batchsize)
+                                           entity_embeddings, trainlidx_eval, trainridx_eval,
+                                           trainoidx_eval, eval_batchsize)
             state.train = np.mean(restrain[0] + restrain[1])
             print >> sys.stderr, "\tMEAN RANK >> valid: %s, train: %s" % (
                 state.valid, state.train)
             if state.bestvalid == -1 or state.valid < state.bestvalid:
                 restest = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
-                                              entity_embeddings, testlidx, testridx,
-                                              testoidx, eval_batchsize)
+                                              entity_embeddings, testlidx_eval, testridx_eval,
+                                              testoidx_eval, eval_batchsize)
                 state.bestvalid = state.valid
                 state.besttrain = state.train
                 state.besttest = np.mean(restest[0] + restest[1])
