@@ -1002,9 +1002,15 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
         out = T.concatenate([out, outo])
         list_in += [inpon]
 
-    # Add regularization
+    # Add regularization to network
     # cost += 1e-4 * lasagne.regularization.regularize_network_params(
     #         sem_model, lasagne.regularization.l2)
+
+    # Add penalty on network output to restrict scale of embeddings
+    # reg_l2 = 1e-3
+    # batchsize = lhs.shape[0]
+    # cost += reg_l2 * lasagne.regularization.l2(lhs) / batchsize
+    # cost += reg_l2 * lasagne.regularization.l2(rhs) / batchsize
 
     if hasattr(fnsim, 'params'):
         # If the similarity function has some parameters, we update them too.
