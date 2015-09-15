@@ -1,11 +1,20 @@
 #! /usr/bin/python
+
+import scipy
+import scipy.sparse as sp
 import sys
+import cPickle
 from model import *
 
 def load_file(path):
     return scipy.sparse.csr_matrix(cPickle.load(open(path)),
             dtype=theano.config.floatX)
 
+
+def load_sparse_csr(filename):
+    loader = np.load(filename)
+    return sp.csr_matrix((loader['data'], loader['indices'], loader['indptr']),
+                         shape=loader['shape'])
 
 def convert2idx(spmat):
     rows, cols = spmat.nonzero()
@@ -14,11 +23,13 @@ def convert2idx(spmat):
 
 def RankingEval(datapath='../data/', dataset='FB15k-test',
         loadmodel='best_valid_model.pkl', neval='all', Nsyn=14951, n=10,
-        idx2synsetfile='FB15k_idx2entity.pkl'):
+                eval_batchsize=20000):
 
     # Load model
     f = open(loadmodel)
+    sem_model = cPickle.load(f)
     embeddings = cPickle.load(f)
+    entity_embeddings = cPickle.load(f)
     leftop = cPickle.load(f)
     rightop = cPickle.load(f)
     simfn = cPickle.load(f)
@@ -41,12 +52,12 @@ def RankingEval(datapath='../data/', dataset='FB15k-test',
         idxr = convert2idx(r)[:neval]
         idxo = convert2idx(o)[:neval]
 
-    ranklfunc = RankLeftFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=Nsyn)
-    rankrfunc = RankRightFnIdx(simfn, embeddings, leftop, rightop,
-            subtensorspec=Nsyn)
+    batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop)
+    batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop)
 
-    res = RankingScoreIdx(ranklfunc, rankrfunc, idxl, idxr, idxo)
+    res = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
+                              entity_embeddings, idxl, idxr,
+                              idxo, eval_batchsize)
     dres = {}
     dres.update({'microlmean': np.mean(res[0])})
     dres.update({'microlmedian': np.median(res[0])})
