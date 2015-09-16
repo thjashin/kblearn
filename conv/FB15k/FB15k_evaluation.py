@@ -2,8 +2,10 @@
 
 import scipy
 import scipy.sparse as sp
+import numpy as np
 import sys
 import cPickle
+
 from model import *
 
 def load_file(path):
