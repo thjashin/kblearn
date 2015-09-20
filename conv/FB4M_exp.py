@@ -238,9 +238,12 @@ def FB4Mexp(state, channel):
     for epoch_count in xrange(1, state.totepochs + 1):
         # Shuffling
         order = np.random.permutation(trainl.shape[1])
-        trainl_idx = trainl[order]
-        trainr_idx = trainr[order]
-        traino_idx = traino[order]
+        # trainl = trainl[:, order]
+        # trainr = trainr[:, order]
+        traino = traino[:, order]
+        trainlidx = trainlidx[order]
+        trainridx = trainridx[order]
+        # trainoidx = trainoidx[order]
 
         # Negatives
         trainln = create_random_mat(trainl.shape, np.arange(state.Nsyn))
