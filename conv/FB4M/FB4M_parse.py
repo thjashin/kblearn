@@ -68,7 +68,7 @@ for item in items:
     words = word_tokenize(desc.lower())
     wids = []
     # words = filter(lambda x: x not in punctuations, words)
-    # words = filter(lambda x: x not in stopwords_, words)
+    words = filter(lambda x: x not in stopwords_, words)
     for word in set(words):
         id_ = word2id.setdefault(word, len(word2id))
         id2word.setdefault(id_, word)
@@ -125,7 +125,7 @@ print 'word vector coverage ratio: %s, miss: %d/%d' % (cnt * 1.0 / total,
 print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
     min(lens), max(lens), np.mean(lens), np.median(lens))
 
-limit_len = 50
+limit_len = 240
 max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)

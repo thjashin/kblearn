@@ -90,18 +90,6 @@ class DD(dict):
         return z
 
 
-def input_transform(wordvec, id2word, input_):
-    M, N = input_.shape
-    D = wordvec.syn0.shape[1]
-    ret = np.zeros((M, 1, 1, N * D), dtype='float32')
-    for i, line in enumerate(input_):
-        for pos, j in enumerate(line):
-            word = id2word[j]
-            if word in wordvec.vocab:
-                ret[i, 0, 0, pos * D:(pos + 1) * D] = wordvec[word] * 10
-    return ret
-
-
 def toidx(input_, start, n_eval):
     idxs = convert2idx(input_)
     return idxs, idxs[start:(start + n_eval)]

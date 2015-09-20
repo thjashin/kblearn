@@ -300,7 +300,7 @@ for mid, name, words in items_seg:
 print 'input text length: min(%d) / max(%d) / avg(%d) / median(%d)' % (
     min(lens), max(lens), np.mean(lens), np.median(lens))
 
-limit_len = 160
+limit_len = 240
 max_len = min(max(lens), limit_len)
 print 'feature length:', max_len
 print 'covered samples:', np.sum(np.array(lens) <= max_len) * 1.0 / len(lens)
