@@ -238,9 +238,9 @@ def FB4Mexp(state, channel):
     for epoch_count in xrange(1, state.totepochs + 1):
         # Shuffling
         order = np.random.permutation(trainl.shape[1])
-        trainl = trainl[:, order]
-        trainr = trainr[:, order]
-        traino = traino[:, order]
+        trainl_idx = trainl[order]
+        trainr_idx = trainr[order]
+        traino_idx = traino[order]
 
         # Negatives
         trainln = create_random_mat(trainl.shape, np.arange(state.Nsyn))
@@ -363,7 +363,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
            lremb=0.1, lrparam=1., nbatches=1000, totepochs=1000, test_all=1, neval=50,
            seed=123, savepath='.', eval_batchsize=5120000, entity_batchsize=80000,
-           printbatches=40):
+           printbatches=1):
     # Argument of the experiment script
     state = DD()
 
