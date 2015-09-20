@@ -266,8 +266,8 @@ def FB4Mexp(state, channel):
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            out += [outtmp[0]]
-            outb += [outtmp[1]]
+            out.append(outtmp[0])
+            outb.append(outtmp[1])
 
             lhs = outtmp[2]
             lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
