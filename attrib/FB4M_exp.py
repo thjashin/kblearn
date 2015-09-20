@@ -214,6 +214,7 @@ def FB4Mexp(state, channel):
 
     out = []
     outb = []
+    lhs_norms = []
     state.bestvalid = -1
 
     print >> sys.stderr, "BEGIN TRAINING"
@@ -244,14 +245,27 @@ def FB4Mexp(state, channel):
             outtmp = trainfunc(state.lrweights, state.momentum, state.lremb,
                                state.lrparam,
                                sem_inputl, sem_inputr, tmpo, sem_inputnl, sem_inputnr)
-            out += [outtmp[0] / float(batchsize)]
+            out += [outtmp[0]]
             outb += [outtmp[1]]
+
+            lhs = outtmp[2]
+            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
+            lhs_norms.append(lhs_norm)
             # print 'relation updates:', outtmp[2]
             # embeddings normalization
             # if type(embeddings) is list:
             #     embeddings[0].normalize()
             # else:
             #     embeddings.normalize()
+
+            # relation normalization
+            relationVec.normalize()
+
+            if i > 0 and i % state.printbatches == 0:
+                print >> sys.stderr, 'batch %d.%d, cost: %f' % (
+                    epoch_count, i, out[-1])
+                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
+                lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))
@@ -279,6 +293,7 @@ def FB4Mexp(state, channel):
                     sem_func(entity_ngrams[n_entity_batches * entity_batchsize:].toarray())[0]
                 )
             entity_embeddings = np.vstack(entity_embeddings)
+
             resvalid = FastRankingScoreIdx(batch_ranklfunc, batch_rankrfunc,
                                            entity_embeddings, validlidx, validridx,
                                            validoidx, eval_batchsize)
@@ -329,7 +344,8 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
            Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
            lremb=0.1, lrparam=1., nbatches=1000, totepochs=2000, test_all=1, neval=50,
-           seed=123, savepath='.', eval_batchsize=40000, entity_batchsize=40000):
+           seed=123, savepath='.', eval_batchsize=5120000, entity_batchsize=40000,
+           printbatches=1):
     # Argument of the experiment script
     state = DD()
 
@@ -357,6 +373,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
     state.savepath = savepath
     state.eval_batchsize = eval_batchsize
     state.entity_batchsize = entity_batchsize
+    state.printbatches = printbatches
 
     if not os.path.isdir(state.savepath):
         os.mkdir(state.savepath)
