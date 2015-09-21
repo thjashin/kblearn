@@ -219,39 +219,45 @@ g.close()
 #################################################
 ### Creation of the dataset files
 
-unseen_ents = []
-remove_tst_ex = []
-
 for datatyp in ['train', 'valid', 'test']:
     print datatyp
+
+    unseen_ents = []
+    remove_tst_ex = []
+
     f = open(rand_split_path + '%s.tsv' % datatyp, 'r')
     dat = f.readlines()
     f.close()
 
+    valid_triples = []
+    for i in dat:
+        lhs, rel, rhs = parseline(i[:-1])
+        if lhs[0] in entity2idx and rhs[0] in entity2idx and rel[0] in entity2idx:
+            valid_triples.append((lhs, rel, rhs))
+        else:
+            if lhs[0] not in entity2idx:
+                unseen_ents += [lhs[0]]
+            if rel[0] not in entity2idx:
+                unseen_ents += [rel[0]]
+            if rhs[0] not in entity2idx:
+                unseen_ents += [rhs[0]]
+            remove_tst_ex += [i[:-1]]
+
     # Declare the dataset variables
-    inpl = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(dat)),
+    inpl = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(valid_triples)),
                          dtype='float32')
-    inpr = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(dat)),
+    inpr = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(valid_triples)),
                          dtype='float32')
-    inpo = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(dat)),
+    inpo = sp.lil_matrix((np.max(entity2idx.values()) + 1, len(valid_triples)),
                          dtype='float32')
     # Fill the sparse matrices
     ct = 0
-    for i in dat:
-        lhs, rel, rhs = parseline(i[:-1])
+    for lhs, rel, rhs in valid_triples:
         if lhs[0] in entity2idx and rhs[0] in entity2idx and rel[0] in entity2idx:
             inpl[entity2idx[lhs[0]], ct] = 1
             inpr[entity2idx[rhs[0]], ct] = 1
             inpo[entity2idx[rel[0]], ct] = 1
             ct += 1
-        else:
-            if lhs[0] in entity2idx:
-                unseen_ents += [lhs[0]]
-            if rel[0] in entity2idx:
-                unseen_ents += [rel[0]]
-            if rhs[0] in entity2idx:
-                unseen_ents += [rhs[0]]
-            remove_tst_ex += [i[:-1]]
 
     # Save the datasets
     if 'data' not in os.listdir('../'):
@@ -259,17 +265,20 @@ for datatyp in ['train', 'valid', 'test']:
     f = open('../data/FB4M-%s-lhs.pkl' % datatyp, 'w')
     g = open('../data/FB4M-%s-rhs.pkl' % datatyp, 'w')
     h = open('../data/FB4M-%s-rel.pkl' % datatyp, 'w')
-    cPickle.dump(inpl.tocsr(), f, -1)
+    inpl_csr = inpl.tocsr()
+    cPickle.dump(inpl_csr, f, -1)
     cPickle.dump(inpr.tocsr(), g, -1)
     cPickle.dump(inpo.tocsr(), h, -1)
     f.close()
     g.close()
     h.close()
 
-unseen_ents = list(set(unseen_ents))
-print len(unseen_ents)
-remove_tst_ex = list(set(remove_tst_ex))
-print len(remove_tst_ex)
+    unseen_ents = list(set(unseen_ents))
+    print 'unseen entities:', len(unseen_ents)
+    remove_tst_ex = list(set(remove_tst_ex))
+    print 'remove triples:', len(remove_tst_ex)
+    # for i in remove_tst_ex:
+    #     print i
 
-# for i in remove_tst_ex:
-#     print i
+    print 'inpl.shape:', inpl_csr.shape
+    print 'inpl.nonzeros:', inpl_csr.nonzero()[0].shape
