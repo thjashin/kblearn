@@ -7,6 +7,23 @@ import theano.tensor as T
 import lasagne
 
 
+def unit_norm(x):
+    """Unit-Normalization activation function
+
+    Parameters
+    ----------
+    x : float32
+        The activation (the summed, weighted input of a neuron).
+
+    Returns
+    -------
+    float32 where the 2-norm of the row is 1 and each single value is in [0, 1]
+        The output of the unit_norm function applied to the activation.
+    """
+    eps = 1e-6  # avoid NaN gradient when T.sqrt(0)
+    return (x.T / T.sqrt((x ** 2).T.sum(axis=0) + eps)).T
+
+
 def build_model(input_dim, output_dim, batch_size=None):
     l_in = lasagne.layers.InputLayer(
         shape=(batch_size, input_dim),
@@ -30,10 +47,9 @@ def build_model(input_dim, output_dim, batch_size=None):
     l_out = lasagne.layers.DenseLayer(
         l_hidden1,
         num_units=output_dim,
-        nonlinearity=lasagne.nonlinearities.rectify,
-        W=lasagne.init.GlorotUniform(),
+        nonlinearity=unit_norm,
+        W=lasagne.init.Uniform(0.001),
     )
-    # TODO(jiaxin): add a normalization layer
     return l_out
 
 

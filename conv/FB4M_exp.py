@@ -167,9 +167,9 @@ def FB4Mexp(state, channel):
     print 'trainlidx_eval.shape:', trainlidx_eval.shape
     trainridx, trainridx_eval = toidx(trainr, 0, state.neval)
     trainoidx, trainoidx_eval = toidx(traino, 0, state.neval)
-    validlidx, validlidx_eval = toidx(validl, state.neval, state.neval)
-    validridx, validridx_eval = toidx(validr, state.neval, state.neval)
-    validoidx, validoidx_eval = toidx(valido, state.neval, state.neval)
+    validlidx, validlidx_eval = toidx(validl, 0, state.neval)
+    validridx, validridx_eval = toidx(validr, 0, state.neval)
+    validoidx, validoidx_eval = toidx(valido, 0, state.neval)
     testlidx, testlidx_eval = toidx(testl, 0, state.neval)
     testridx, testridx_eval = toidx(testr, 0, state.neval)
     testoidx, testoidx_eval = toidx(testo, 0, state.neval)
