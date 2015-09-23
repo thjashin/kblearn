@@ -32,7 +32,7 @@ if 'data' not in os.listdir('../'):
 
 
 def parseline(line):
-    lhs, rel, rhs = line.split('\t')
+    lhs, rel, rhs = line.strip().split('\t')
     return lhs.strip(), rel.strip(), rhs.strip()
 
 entity2idx = {}
@@ -56,7 +56,7 @@ items_seg = {}
 with open(ENTITY_DESCRIPTION_DATA, 'r') as f:
     text = f.read().decode('utf8').strip().split('\n')
 for line in text:
-    arr = line.split('\t')
+    arr = line.strip().split('\t')
     mid = arr[0].strip()
     desc = arr[1].strip()
     # letters only
@@ -88,7 +88,7 @@ for datatyp in ['train', 'valid', 'test']:
     dat = f.readlines()
     f.close()
     for i in dat:
-        lhs, rel, rhs = parseline(i[:-1])
+        lhs, rel, rhs = parseline(i)
         entleftlist.add(lhs)
         entrightlist.add(rhs)
         rellist.add(rel)
@@ -117,11 +117,12 @@ print 'Number of entities:', len(entity2idx)
 
 # add relations at the end of the dictionary
 idx = len(entity2idx)
+Nsyn = idx
 for i in rellist:
     entity2idx[i] = idx
     idx2entity[idx] = i
     idx += 1
-nbrel = idx - len(entity2idx)
+nbrel = idx - Nsyn
 print "Number of relations:", nbrel
 
 f = open('../data/FB4M_entity2idx.pkl', 'w')
@@ -158,7 +159,7 @@ for datatyp in ['train', 'valid', 'test']:
     # Fill the sparse matrices
     ct = 0
     for i in dat:
-        lhs, rel, rhs = parseline(i[:-1])
+        lhs, rel, rhs = parseline(i)
         inpl[entity2idx[lhs], ct] = 1
         inpr[entity2idx[rhs], ct] = 1
         inpo[entity2idx[rel], ct] = 1
