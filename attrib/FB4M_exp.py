@@ -227,8 +227,8 @@ def FB4Mexp(state, channel):
         traino = traino[:, order]
 
         # Negatives
-        trainln = create_random_mat(trainl.shape, np.arange(state.Nsyn))
-        trainrn = create_random_mat(trainr.shape, np.arange(state.Nsyn))
+        trainln = create_random_mat(trainl.shape, np.arange(state.Ntrain))
+        trainrn = create_random_mat(trainr.shape, np.arange(state.Ntrain))
 
         for i in range(state.nbatches):
             tmpl = trainl[:, i * batchsize:(i + 1) * batchsize]
@@ -340,12 +340,12 @@ def FB4Mexp(state, channel):
     return channel.COMPLETE
 
 
-def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
-           Nsyn=4661857, Nrel=2663, loadmodel=False, loademb=False, op='Unstructured',
+def launch(datapath='data/', dataset='FB4M', Nent=4562841 + 2654,
+           Nsyn=4562841, Nrel=2654, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
            lremb=0.1, lrparam=1., nbatches=1000, totepochs=2000, test_all=1, neval=50,
            seed=123, savepath='.', eval_batchsize=5120000, entity_batchsize=40000,
-           printbatches=1):
+           printbatches=1, Ntrain=3333949):
     # Argument of the experiment script
     state = DD()
 
@@ -353,6 +353,7 @@ def launch(datapath='data/', dataset='FB4M', Nent=4661857 + 2663,
     state.dataset = dataset
     state.Nent = Nent
     state.Nsyn = Nsyn
+    state.Ntrain = Ntrain
     state.Nrel = Nrel
     state.loadmodel = loadmodel
     state.loademb = loademb

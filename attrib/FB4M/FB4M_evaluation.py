@@ -28,7 +28,7 @@ def convert2idx(spmat):
 
 
 def RankingEval(datapath='../data/', dataset='FB4M',
-                loadmodel='best_valid_model.pkl', neval=80000, Nsyn=4661857, n=10,
+                loadmodel='best_valid_model.pkl', neval=80000, Nsyn=4562841, n=10,
                 entity_batchsize=80000, eval_batchsize=5120000):
     # Load model
     f = open(loadmodel)

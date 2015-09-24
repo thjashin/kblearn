@@ -58,7 +58,11 @@ with open(ENTITY_DESCRIPTION_DATA, 'r') as f:
 for line in text:
     arr = line.strip().split('\t')
     mid = arr[0].strip()
-    desc = arr[1].strip()
+    desc = ''
+    if len(arr) == 2:
+        desc = arr[1].strip()
+    else:
+        print 'bad line:', line.encode('utf8')
     # letters only
     desc = re.sub("[^a-zA-Z]", " ", desc)
     words = word_tokenize(desc.lower())
