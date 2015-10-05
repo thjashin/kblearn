@@ -1080,7 +1080,7 @@ def TrainSemantic(fnsim, sem_model, embeddings, leftop, rightop, margin=1.0, rel
                        i.e. for which an update occurs.
     """
     return theano.function(list_in,
-                           [cost, T.mean(out), lhs],
+                           [cost, T.mean(out)],
                            updates=updates, on_unused_input='ignore')
 
 

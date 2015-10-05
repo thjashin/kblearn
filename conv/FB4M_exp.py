@@ -212,16 +212,19 @@ def FB4Mexp(state, channel):
             relationVec = Embeddings(np.random, state.Nrel, state.ndim, 'relvec')
             embeddings = [embeddings, relationVec, relationVec]
         simfn = eval(state.simfn + 'sim')
+        sem_model = build_model(entity_words.shape[2], state.ndim, word_embeddings, batch_size=None)
     else:
         f = open(state.loadmodel)
+        sem_model = cPickle.load(f)
         embeddings = cPickle.load(f)
+        entity_embeddings = cPickle.load(f)
         leftop = cPickle.load(f)
         rightop = cPickle.load(f)
         simfn = cPickle.load(f)
         f.close()
+        relationVec = embeddings[1]
 
     # Function compilation
-    sem_model = build_model(entity_words.shape[2], state.ndim, word_embeddings, batch_size=None)
     trainfunc = TrainSemantic(simfn, sem_model, embeddings, leftop,
                               rightop, margin=state.margin, rel=False)
     sem_func = SemanticFunc(sem_model)
@@ -230,7 +233,7 @@ def FB4Mexp(state, channel):
 
     out = []
     outb = []
-    lhs_norms = []
+    # lhs_norms = []
     state.bestvalid = -1
 
     print >> sys.stderr, "BEGIN TRAINING"
@@ -269,9 +272,9 @@ def FB4Mexp(state, channel):
             out.append(outtmp[0])
             outb.append(outtmp[1])
 
-            lhs = outtmp[2]
-            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
-            lhs_norms.append(lhs_norm)
+            # lhs = outtmp[2]
+            # lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
+            # lhs_norms.append(lhs_norm)
             # print 'relation updates:', outtmp[2]
             # embeddings normalization
             # if type(embeddings) is list:
@@ -285,8 +288,8 @@ def FB4Mexp(state, channel):
             if i > 0 and i % state.printbatches == 0:
                 print >> sys.stderr, 'batch %d.%d, cost: %f' % (
                     epoch_count, i, out[-1])
-                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
-                lhs_norms = []
+                # print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
+                # lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))
@@ -361,12 +364,12 @@ def FB4Mexp(state, channel):
     return channel.COMPLETE
 
 
-def launch(datapath='data/', dataset='FB4M', Nent=4617298 + 2656,
-           Nsyn=4617298, Nrel=2656, loadmodel=False, loademb=False, op='Unstructured',
+def launch(datapath='data/', dataset='FB4M', Nent=4629345 + 2651,
+           Nsyn=4629345, Nrel=2651, loadmodel=False, loademb=False, op='Unstructured',
            simfn='Dot', ndim=50, nhid=50, margin=1., lrweights=0.1, momentum=0.9,
            lremb=0.1, lrparam=1., nbatches=1000, totepochs=1000, test_all=1, neval=50,
            seed=123, savepath='.', eval_batchsize=5120000, entity_batchsize=80000,
-           printbatches=1, Ntrain=3551595):
+           printbatches=1, Ntrain=3598892):
     # Argument of the experiment script
     state = DD()
 

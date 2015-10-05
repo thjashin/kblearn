@@ -20,4 +20,5 @@ launch(
     datapath='../data/',
     eval_batchsize=5120000,
     entity_batchsize=20000,
+    loadmodel='FB4M_TransE/best_valid_model.pkl',
 )

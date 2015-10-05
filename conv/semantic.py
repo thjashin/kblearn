@@ -41,7 +41,7 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
     )
     l_conv11 = dnn.Conv2DDNNLayer(
         l_transpose,
-        num_filters=32,
+        num_filters=64,
         filter_size=(D, 1),
         stride=(D, 1),
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -49,7 +49,7 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
     )
     l_conv12 = dnn.Conv2DDNNLayer(
         l_conv11,
-        num_filters=32,
+        num_filters=64,
         filter_size=(1, 3),
         stride=(1, 1),
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -61,7 +61,7 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
     )
     l_conv21 = dnn.Conv2DDNNLayer(
         l_pool1,
-        num_filters=64,
+        num_filters=128,
         filter_size=(1, 3),
         stride=(1, 1),
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -69,7 +69,7 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
     )
     l_conv22 = dnn.Conv2DDNNLayer(
         l_conv21,
-        num_filters=64,
+        num_filters=128,
         filter_size=(1, 3),
         stride=(1, 1),
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -79,30 +79,30 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
         l_conv22,
         pool_size=(1, 2),
     )
-    #     l_conv3 = dnn.Conv2DDNNLayer(
-    #         l_pool2,
-    #         num_filters=128,
-    #         filter_size=(1, 3),
-    #         stride=(1, 1),
-    #         nonlinearity=lasagne.nonlinearities.rectify,
-    #         W=lasagne.init.GlorotUniform(),
-    #     )
-    #     l_pool3 = dnn.MaxPool2DDNNLayer(
-    #         l_conv3,
-    #         pool_size=(1, 2),
-    #     )
-    #     l_conv4 = dnn.Conv2DDNNLayer(
-    #         l_pool3,
-    #         num_filters=256,
-    #         filter_size=(1, 3),
-    #         stride=(1, 1),
-    #         nonlinearity=lasagne.nonlinearities.rectify,
-    #         W=lasagne.init.GlorotUniform(),
-    #     )
-    #     l_pool4 = dnn.MaxPool2DDNNLayer(
-    #         l_conv4,
-    #         pool_size=(1, 2),
-    #     )
+    l_conv3 = dnn.Conv2DDNNLayer(
+        l_pool2,
+        num_filters=256,
+        filter_size=(1, 3),
+        stride=(1, 1),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+    )
+    l_pool3 = dnn.MaxPool2DDNNLayer(
+        l_conv3,
+        pool_size=(1, 2),
+    )
+    l_conv4 = dnn.Conv2DDNNLayer(
+        l_pool3,
+        num_filters=512,
+        filter_size=(1, 3),
+        stride=(1, 1),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+    )
+    l_pool4 = dnn.MaxPool2DDNNLayer(
+        l_conv4,
+        pool_size=(1, 2),
+    )
     #     l_conv5 = dnn.Conv2DDNNLayer(
     #         l_pool4,
     #         num_filters=512,
@@ -116,7 +116,7 @@ def build_model(input_dim, output_dim, word_vectors, batch_size=None):
     #         pool_size=(1, 2),
     #     )
     l_fc1 = lasagne.layers.DenseLayer(
-        l_pool2,
+        l_pool4,
         num_units=500,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),

@@ -216,7 +216,7 @@ def FB15kexp(state, channel):
     out = []
     outb = []
     state.bestvalid = -1
-    relation_update_ratio = []
+    # relation_update_ratio = []
 
     print >> sys.stderr, "BEGIN TRAINING"
     timeref = time.time()
@@ -236,7 +236,7 @@ def FB15kexp(state, channel):
         trainlnidx = convert2idx(trainln)
         trainrnidx = convert2idx(trainrn)
 
-        lhs_norms = []
+        # lhs_norms = []
 
         for i in range(state.nbatches):
             tmpo = traino[:, i * batchsize:(i + 1) * batchsize]
@@ -259,9 +259,9 @@ def FB15kexp(state, channel):
             # lhs_emb = outtmp[2]
             # relation_updates = np.array(outtmp[2])
             # relation_update_ratio.append(np.linalg.norm(relation_updates) / np.linalg.norm(embeddings[1].E.get_value()))
-            lhs = outtmp[2]
-            lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
-            lhs_norms.append(lhs_norm)
+            # lhs = outtmp[2]
+            # lhs_norm = np.mean([np.linalg.norm(j) for j in lhs])
+            # lhs_norms.append(lhs_norm)
             out.append(outtmp[0])
             outb.append(outtmp[1])
             # embeddings normalization
@@ -276,8 +276,8 @@ def FB15kexp(state, channel):
             if i > 0 and i % state.printbatches == 0:
                 print >> sys.stderr, 'batch %d.%d, cost: %f' % (
                     epoch_count, i, out[-1])
-                print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
-                lhs_norms = []
+                # print >> sys.stderr, 'lhs norm: %f' % np.mean(lhs_norms)
+                # lhs_norms = []
 
         print >> sys.stderr, 'Epoch %d, cost: %f' % (
             epoch_count, np.mean(out[-state.nbatches:]))

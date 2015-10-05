@@ -19,8 +19,8 @@ def convert2idx(spmat):
     return rows[np.argsort(cols)]
 
 
-def RankingEval(datapath='../data/', dataset='FB4M-valid',
-                loadmodel='best_valid_model.pkl', neval=10, Nsyn=4562841, n=10,
+def RankingEval(datapath='../data/', dataset='FB4M-test',
+                loadmodel='best_valid_model.pkl', neval=1000, Nsyn=4629345, n=10,
                 eval_batchsize=5120000):
     # Load model
     f = open(loadmodel)
@@ -45,9 +45,9 @@ def RankingEval(datapath='../data/', dataset='FB4M-valid',
         idxr = convert2idx(r)
         idxo = convert2idx(o)
     else:
-        idxl = convert2idx(l)[-neval:]
-        idxr = convert2idx(r)[-neval:]
-        idxo = convert2idx(o)[-neval:]
+        idxl = convert2idx(l)[:neval]
+        idxr = convert2idx(r)[:neval]
+        idxo = convert2idx(o)[:neval]
 
     batch_ranklfunc = BatchRankLeftFnIdx(simfn, embeddings, leftop, rightop)
     batch_rankrfunc = BatchRankRightFnIdx(simfn, embeddings, leftop, rightop)
